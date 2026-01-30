@@ -60,7 +60,9 @@ const THUBApp = () => {
     if (saved && saved.protocol) return {
       ...saved.protocol,
       source: saved.protocol.source || 'unknown',
-      oilType: saved.protocol.oilType || 'unknown'
+      oilType: saved.protocol.oilType || 'unknown',
+      injectionMethod: saved.protocol.injectionMethod || 'im',
+      injectionLocation: saved.protocol.injectionLocation || 'glute'
     };
     return {
       compound: 'test_e_200',
@@ -69,7 +71,9 @@ const THUBApp = () => {
       graduation: 2,
       startDate: new Date().toISOString().split('T')[0],
       source: 'unknown',
-      oilType: 'unknown'
+      oilType: 'unknown',
+      injectionMethod: 'im',
+      injectionLocation: 'glute'
     };
   });
 
@@ -167,6 +171,42 @@ const THUBApp = () => {
         to: newProto.startDate
       });
     }
+
+    if (oldProto.source !== newProto.source) {
+      const sourceLabels = { pharmacy: 'Аптека', ugl: 'UGL', unknown: 'Не знам' };
+      changes.push({
+        field: 'Източник',
+        from: sourceLabels[oldProto.source] || oldProto.source,
+        to: sourceLabels[newProto.source] || newProto.source
+      });
+    }
+
+    if (oldProto.oilType !== newProto.oilType) {
+      const oilLabels = { mct: 'MCT', grape_seed: 'Grape Seed', sesame: 'Sesame', castor: 'Castor', other: 'Друго', unknown: 'Не знам' };
+      changes.push({
+        field: 'Масло',
+        from: oilLabels[oldProto.oilType] || oldProto.oilType,
+        to: oilLabels[newProto.oilType] || newProto.oilType
+      });
+    }
+
+    if (oldProto.injectionMethod !== newProto.injectionMethod) {
+      const methodLabels = { im: 'IM', subq: 'SubQ' };
+      changes.push({
+        field: 'Метод',
+        from: methodLabels[oldProto.injectionMethod] || oldProto.injectionMethod,
+        to: methodLabels[newProto.injectionMethod] || newProto.injectionMethod
+      });
+    }
+
+    if (oldProto.injectionLocation !== newProto.injectionLocation) {
+      const locationLabels = { glute: 'Глутеус', delt: 'Делтоид', quad: 'Бедро', abdomen: 'Корем' };
+      changes.push({
+        field: 'Локация',
+        from: locationLabels[oldProto.injectionLocation] || oldProto.injectionLocation,
+        to: locationLabels[newProto.injectionLocation] || newProto.injectionLocation
+      });
+    }
     
     return changes;
   };
@@ -225,7 +265,9 @@ const THUBApp = () => {
         graduation: 2,
         startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         source: 'pharmacy',
-        oilType: 'mct'
+        oilType: 'mct',
+        injectionMethod: 'im',
+        injectionLocation: 'glute'
       }
     };
     
@@ -629,6 +671,46 @@ const THUBApp = () => {
     const maxUnits = protocolData.graduation === 1 ? 50 : 100;
     const displayUnits = Math.min(unitsRounded, maxUnits);
 
+    // Calculate stability index
+    const calculateStability = () => {
+      const halfLife = compound.id.includes('prop') ? 1.5 : 4.5;
+      const tmax = compound.id.includes('prop') ? 0.5 : 1.5;
+      const bioavailability = 0.70;
+      const ka = Math.log(2) / (tmax / 3);
+      const ke = Math.log(2) / halfLife;
+      
+      const injectionInterval = protocolData.frequency === 'ED' ? 1 : 
+                                protocolData.frequency === 'EOD' ? 2 : 
+                                protocolData.frequency === '3xW' ? 7/3 : 3.5;
+      
+      // Calculate concentrations for days 28-42 (steady state)
+      const concentrations = [];
+      for (let i = 28 * 8; i <= 42 * 8; i++) {
+        const t = i / 8;
+        let concentration = 0;
+        
+        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
+          const injDay = injNum * injectionInterval;
+          const timeSinceInj = t - injDay;
+          if (timeSinceInj >= 0 && timeSinceInj < 30) {
+            const dose = actualDose * bioavailability;
+            const c = dose * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
+            concentration += Math.max(0, c);
+          }
+        }
+        concentrations.push(concentration);
+      }
+      
+      const peak = Math.max(...concentrations);
+      const trough = Math.min(...concentrations);
+      const fluctuation = peak > 0 ? ((peak - trough) / peak) * 100 : 0;
+      const stability = Math.round(100 - fluctuation);
+      
+      return { stability, peak, trough, fluctuation: Math.round(fluctuation) };
+    };
+
+    const stabilityData = calculateStability();
+
     return (
       <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }}>
         
@@ -728,6 +810,73 @@ const THUBApp = () => {
               <option value="other">Друго</option>
               <option value="unknown">Не знам</option>
             </select>
+          </div>
+
+          {/* Injection Method */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
+              Метод на инжектиране
+            </label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'im' }))}
+                style={{ 
+                  backgroundColor: protocolData.injectionMethod === 'im' ? '#0891b2' : '#0a1628',
+                  borderColor: protocolData.injectionMethod === 'im' ? '#0891b2' : '#1e3a5f',
+                  color: 'white'
+                }}
+                className="flex-1 py-3 border rounded-xl font-medium transition-colors"
+              >
+                💉 IM
+                <div style={{ color: protocolData.injectionMethod === 'im' ? '#cffafe' : '#64748b' }} className="text-xs">интрамускулно</div>
+              </button>
+              <button
+                onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'subq' }))}
+                style={{ 
+                  backgroundColor: protocolData.injectionMethod === 'subq' ? '#0891b2' : '#0a1628',
+                  borderColor: protocolData.injectionMethod === 'subq' ? '#0891b2' : '#1e3a5f',
+                  color: 'white'
+                }}
+                className="flex-1 py-3 border rounded-xl font-medium transition-colors"
+              >
+                💧 SubQ
+                <div style={{ color: protocolData.injectionMethod === 'subq' ? '#cffafe' : '#64748b' }} className="text-xs">подкожно</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Injection Location */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
+              Локация
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'glute', label: 'Глутеус', emoji: '🍑' },
+                { id: 'delt', label: 'Делтоид', emoji: '💪' },
+                { id: 'quad', label: 'Бедро', emoji: '🦵' },
+                { id: 'abdomen', label: 'Корем', emoji: '⭕' }
+              ].map(loc => (
+                <button
+                  key={loc.id}
+                  onClick={() => setProtocolData(prev => ({ ...prev, injectionLocation: loc.id }))}
+                  style={{ 
+                    backgroundColor: protocolData.injectionLocation === loc.id ? '#0891b2' : '#0a1628',
+                    borderColor: protocolData.injectionLocation === loc.id ? '#0891b2' : '#1e3a5f',
+                    color: 'white'
+                  }}
+                  className="py-3 border rounded-xl font-medium transition-colors text-sm"
+                >
+                  {loc.emoji} {loc.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Weekly Dose */}
@@ -1009,6 +1158,69 @@ const THUBApp = () => {
             
             <div style={{ color: '#475569' }} className="text-xs text-center mt-2">
               t½ = {compound.id.includes('prop') ? '1.5' : '4.5'} дни • {freq.name}
+            </div>
+          </div>
+
+          {/* Stability Gauge */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-6"
+          >
+            <div className="flex items-center justify-between gap-6">
+              {/* Circular Gauge */}
+              <div className="relative w-32 h-32">
+                <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Background circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="#1e293b"
+                    strokeWidth="12"
+                  />
+                  {/* Progress circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke={stabilityData.stability >= 70 ? '#10b981' : stabilityData.stability >= 50 ? '#f59e0b' : '#ef4444'}
+                    strokeWidth="12"
+                    strokeLinecap="round"
+                    strokeDasharray={`${stabilityData.stability * 2.51} 251`}
+                    style={{
+                      filter: `drop-shadow(0 0 8px ${stabilityData.stability >= 70 ? 'rgba(16, 185, 129, 0.5)' : stabilityData.stability >= 50 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(239, 68, 68, 0.5)'})`
+                    }}
+                  />
+                </svg>
+                {/* Center text */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span 
+                    className="text-3xl font-bold"
+                    style={{ color: stabilityData.stability >= 70 ? '#10b981' : stabilityData.stability >= 50 ? '#f59e0b' : '#ef4444' }}
+                  >
+                    {stabilityData.stability}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="flex-1">
+                <h4 className="text-white font-semibold mb-2">Индекс на стабилност</h4>
+                <p style={{ color: '#64748b' }} className="text-sm mb-3">
+                  Показва колко стабилни са нивата между инжекциите.
+                </p>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span style={{ color: '#64748b' }}>Флуктуация:</span>
+                    <span style={{ color: '#94a3b8' }}>~{stabilityData.fluctuation}%</span>
+                  </div>
+                  <div style={{ color: '#475569' }} className="text-xs mt-2">
+                    Базирано на t½ = {compound.id.includes('prop') ? '1.5' : '4.5'} дни
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1359,14 +1571,6 @@ const THUBApp = () => {
             <p style={{ color: '#64748b' }} className="text-xs">{freq.shortName} • {proto.weeklyDose} {compound.unit}/сед</p>
           </div>
         </div>
-        <button
-          onClick={() => setCurrentStep('protocol')}
-          style={{ color: '#64748b' }}
-          className="p-2 hover:text-white transition-colors"
-          title="Редактирай протокол"
-        >
-          ⚙️
-        </button>
       </header>
 
       {/* Content */}
@@ -1668,7 +1872,21 @@ const THUBApp = () => {
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="border rounded-2xl p-4"
             >
-              <h3 className="text-white font-bold mb-4">Текущ протокол</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-white font-bold">Текущ протокол</h3>
+                <button 
+                  onClick={() => setCurrentStep('protocol')}
+                  style={{ 
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    borderColor: '#0891b2',
+                    color: '#22d3ee',
+                    boxShadow: '0 0 10px rgba(6, 182, 212, 0.15)'
+                  }}
+                  className="px-3 py-1.5 border rounded-lg text-sm hover:bg-cyan-500/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all duration-300"
+                >
+                  Редактирай
+                </button>
+              </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span style={{ color: '#64748b' }}>Име</span>
@@ -1688,7 +1906,7 @@ const THUBApp = () => {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: '#64748b' }}>Доза/инжекция</span>
-                  <span style={{ color: '#22d3ee' }} className="font-bold">{unitsRounded}U ({actualDose.toFixed(1)} {compound.unit})</span>
+                  <span style={{ color: '#22d3ee' }} className="font-bold">{unitsRaw.toFixed(1)}U ({dosePerInjection.toFixed(1)} {compound.unit})</span>
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: '#64748b' }}>Скала</span>
@@ -1710,6 +1928,19 @@ const THUBApp = () => {
                      proto.oilType === 'sesame' ? 'Sesame' : 
                      proto.oilType === 'castor' ? 'Castor' : 
                      proto.oilType === 'other' ? 'Друго' : 'Не знам'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: '#64748b' }}>Метод</span>
+                  <span className="text-white">{proto.injectionMethod === 'im' ? '💉 IM' : '💧 SubQ'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: '#64748b' }}>Локация</span>
+                  <span className="text-white">
+                    {proto.injectionLocation === 'glute' ? '🍑 Глутеус' : 
+                     proto.injectionLocation === 'delt' ? '💪 Делтоид' : 
+                     proto.injectionLocation === 'quad' ? '🦵 Бедро' : 
+                     proto.injectionLocation === 'abdomen' ? '⭕ Корем' : 'Не е зададено'}
                   </span>
                 </div>
               </div>
