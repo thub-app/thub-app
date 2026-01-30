@@ -1478,7 +1478,7 @@ const THUBApp = () => {
     return (
       <div className="relative">
         <div 
-          style={{ backgroundColor: '#0f172a', borderColor: '#334155', width: '100px', height: '340px' }}
+          style={{ backgroundColor: '#0f172a', borderColor: '#334155', width: '110px', height: '420px' }}
           className="relative border-2 rounded-xl overflow-hidden"
         >
           {ticks.map(tick => {
@@ -1495,19 +1495,19 @@ const THUBApp = () => {
                 <div className="flex items-center justify-between px-1">
                   <div 
                     style={{ 
-                      backgroundColor: isMajor ? '#e2e8f0' : isMedium ? '#64748b' : '#475569',
-                      width: isMajor ? '16px' : isMedium ? '10px' : '6px',
-                      height: isMajor ? '2px' : '1px'
+                      backgroundColor: isMajor ? '#f1f5f9' : isMedium ? '#94a3b8' : '#64748b',
+                      width: isMajor ? '18px' : isMedium ? '12px' : '7px',
+                      height: isMajor ? '3px' : isMedium ? '2px' : '1px'
                     }}
                   />
                   {isMajor && (
-                    <span style={{ color: '#e2e8f0', fontSize: '10px' }} className="font-bold">{tick}</span>
+                    <span style={{ color: '#f1f5f9', fontSize: '12px' }} className="font-bold">{tick}</span>
                   )}
                   <div 
                     style={{ 
-                      backgroundColor: isMajor ? '#e2e8f0' : isMedium ? '#64748b' : '#475569',
-                      width: isMajor ? '16px' : isMedium ? '10px' : '6px',
-                      height: isMajor ? '2px' : '1px'
+                      backgroundColor: isMajor ? '#f1f5f9' : isMedium ? '#94a3b8' : '#64748b',
+                      width: isMajor ? '18px' : isMedium ? '12px' : '7px',
+                      height: isMajor ? '3px' : isMedium ? '2px' : '1px'
                     }}
                   />
                 </div>
@@ -1522,7 +1522,7 @@ const THUBApp = () => {
                 ? 'linear-gradient(to top, #059669, #10b981, #34d399)' 
                 : 'linear-gradient(to top, #0891b2, #06b6d4, #22d3ee)',
               height: `${4 + (displayUnits / maxUnits) * 92}%`,
-              opacity: 0.7
+              opacity: 0.5
             }}
             className="absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-b-lg"
           />
@@ -1540,19 +1540,13 @@ const THUBApp = () => {
       {/* Header */}
       <header 
         style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-        className="px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b"
+        className="px-4 py-2 flex items-center sticky top-0 z-40 border-b"
       >
-        <div className="flex items-center gap-3">
-          <div 
-            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
-            className="w-10 h-10 rounded-lg border flex items-center justify-center"
-          >
-            <span className="text-white text-xs font-black">THUB</span>
-          </div>
-          <div>
-            <p className="text-white font-semibold">{profile.name}</p>
-            <p style={{ color: '#64748b' }} className="text-xs">{freq.shortName} • {proto.weeklyDose} {compound.unit}/сед</p>
-          </div>
+        <div 
+          style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+          className="w-10 h-10 rounded-lg border flex items-center justify-center"
+        >
+          <span className="text-white text-xs font-black">THUB</span>
         </div>
       </header>
 
@@ -1565,8 +1559,10 @@ const THUBApp = () => {
             
             {/* Date */}
             <div className="text-center">
-              <p style={{ color: '#64748b' }} className="text-sm">{dayNames[today.getDay()]}</p>
-              <p className="text-white text-3xl font-bold">{today.getDate()} {monthNames[today.getMonth()]}</p>
+              <p className="text-white text-2xl font-bold">
+                <span style={{ color: '#64748b' }}>{dayNames[today.getDay()]}, </span>
+                {today.getDate()} {monthNames[today.getMonth()]}
+              </p>
             </div>
 
             {todayIsInjectionDay ? (
@@ -1593,47 +1589,6 @@ const THUBApp = () => {
                       </div>
                     </div>
                   </div>
-
-                  {/* ОПГ - вътре в картата */}
-                  {rotation && rotation.lowerCount > 0 && rotation.higherCount > 0 && (
-                    <div 
-                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
-                      className="border rounded-xl p-3 mt-4"
-                    >
-                      <p style={{ color: '#22d3ee' }} className="font-semibold mb-2 text-sm">Оптимизация на графика</p>
-                      
-                      <div className="flex justify-center gap-2 mb-2">
-                        {(() => {
-                          const schedule = [];
-                          let higherUsed = 0;
-                          for (let i = 0; i < injectionsPerPeriod; i++) {
-                            const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
-                            if (higherUsed < expectedHigher) {
-                              schedule.push(rotation.higherUnits);
-                              higherUsed++;
-                            } else {
-                              schedule.push(rotation.lowerUnits);
-                            }
-                          }
-                          return schedule.map((units, i) => (
-                            <div 
-                              key={i}
-                              style={{ 
-                                backgroundColor: units === rotation.higherUnits ? '#0891b2' : '#164e63'
-                              }}
-                              className="px-2 py-1 rounded-lg"
-                            >
-                              <span className="text-white font-bold text-sm">{units}U</span>
-                            </div>
-                          ));
-                        })()}
-                      </div>
-                      
-                      <p style={{ color: '#94a3b8' }} className="text-xs text-center">
-                        {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {rotation.totalMg.toFixed(1)} {compound.unit}
-                      </p>
-                    </div>
-                  )}
 
                   {/* Location Picker */}
                   <div className="mt-4">
@@ -1753,6 +1708,47 @@ const THUBApp = () => {
                     }
                   </button>
                 </div>
+
+                {/* ОПГ - отделна карта под scroll */}
+                {rotation && rotation.lowerCount > 0 && rotation.higherCount > 0 && (
+                  <div 
+                    style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                    className="border rounded-2xl p-4"
+                  >
+                    <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">Оптимизация на графика</p>
+                    
+                    <div className="flex justify-center gap-2 mb-2 flex-wrap">
+                      {(() => {
+                        const schedule = [];
+                        let higherUsed = 0;
+                        for (let i = 0; i < injectionsPerPeriod; i++) {
+                          const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
+                          if (higherUsed < expectedHigher) {
+                            schedule.push(rotation.higherUnits);
+                            higherUsed++;
+                          } else {
+                            schedule.push(rotation.lowerUnits);
+                          }
+                        }
+                        return schedule.map((units, i) => (
+                          <div 
+                            key={i}
+                            style={{ 
+                              backgroundColor: units === rotation.higherUnits ? '#0891b2' : '#164e63'
+                            }}
+                            className="px-3 py-2 rounded-lg"
+                          >
+                            <span className="text-white font-bold">{units}U</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    
+                    <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
+                      {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {rotation.totalMg.toFixed(1)} {compound.unit}
+                    </p>
+                  </div>
+                )}
 
                 {/* Delta info (if no rotation) */}
                 {!rotation && Math.abs(deltaPct) > 0.01 && (
