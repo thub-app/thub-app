@@ -1703,8 +1703,10 @@ const THUBApp = () => {
 
                 {/* Седмичен график */}
                 {(() => {
-                  // Генерираме седмицата Пн-Нд
-                  const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+                  // EOD = 14 дни, останалите = 7 дни
+                  const isEOD = proto.frequency === 'EOD';
+                  const cycleDays = isEOD ? 14 : 7;
+                  
                   const todayDayOfWeek = today.getDay(); // 0=Нд, 1=Пн...
                   
                   // Намираме понеделника на тази седмица
@@ -1712,8 +1714,12 @@ const THUBApp = () => {
                   const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
                   mondayOfWeek.setDate(today.getDate() - daysFromMonday);
                   
-                  // Изчисляваме статистика за седмицата
-                  const weekData = weekDays.map((dayName, i) => {
+                  // Имена на дните
+                  const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+                  
+                  // Генерираме дните за цикъла
+                  const cycleData = [];
+                  for (let i = 0; i < cycleDays; i++) {
                     const dayDate = new Date(mondayOfWeek);
                     dayDate.setDate(mondayOfWeek.getDate() + i);
                     
@@ -1723,17 +1729,19 @@ const THUBApp = () => {
                     const isCompleted = !!injections[dayKey];
                     const isToday = dayDate.toDateString() === today.toDateString();
                     const isFuture = dayDate > today;
+                    const dayName = dayNamesShort[dayDate.getDay()];
                     
-                    return { dayName, dayDate, dayKey, isInjDay, dose, isCompleted, isToday, isFuture };
-                  });
+                    cycleData.push({ dayName, dayDate, dayKey, isInjDay, dose, isCompleted, isToday, isFuture });
+                  }
                   
-                  // Броим инжекции и дози за текущата седмица
-                  const weekInjections = weekData.filter(d => d.isInjDay);
-                  const weekTotalMg = weekInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
+                  // Броим инжекции и дози за цикъла
+                  const cycleInjections = cycleData.filter(d => d.isInjDay);
+                  const cycleTotalMg = cycleInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
+                  const weeklyMg = isEOD ? cycleTotalMg / 2 : cycleTotalMg;
                   
                   // Групираме дозите за формулата
                   const doseCounts = {};
-                  weekInjections.forEach(d => {
+                  cycleInjections.forEach(d => {
                     doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1;
                   });
                   const doseFormula = Object.entries(doseCounts)
@@ -1746,11 +1754,13 @@ const THUBApp = () => {
                       style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                       className="border rounded-2xl p-4"
                     >
-                      <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">Седмичен график</p>
+                      <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">
+                        {isEOD ? 'График (14 дни)' : 'Седмичен график'}
+                      </p>
                       
-                      <div className="overflow-x-auto pb-2">
-                        <div className="flex gap-2 min-w-max justify-center">
-                          {weekData.map((day, i) => {
+                      <div className="overflow-x-auto pt-2 pb-2">
+                        <div className="flex gap-2 min-w-max justify-center px-1">
+                          {cycleData.map((day, i) => {
                             // Определяме цвета
                             let bgColor = '#0891b2'; // cyan - предстои
                             if (day.isCompleted) bgColor = '#059669'; // зелен - направено
@@ -1778,7 +1788,7 @@ const THUBApp = () => {
                                 disabled={!canClick}
                                 style={{ 
                                   backgroundColor: bgColor,
-                                  minWidth: '44px',
+                                  minWidth: '40px',
                                   cursor: canClick ? 'pointer' : 'default',
                                   opacity: day.isFuture ? 0.6 : 1,
                                   animation: day.isToday ? 'pulse 2s infinite' : 'none',
@@ -1787,16 +1797,16 @@ const THUBApp = () => {
                                 className="px-2 py-2 rounded-lg text-center border-0"
                               >
                                 <div style={{ color: 'white', fontSize: '10px', opacity: 0.8 }}>{day.dayName}</div>
-                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>{day.dose}U</div>
+                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
                               </button>
                             );
                           })}
                         </div>
                       </div>
                       
-                      {/* Формула за текущата седмица */}
+                      {/* Формула */}
                       <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
-                        {doseFormula} = {weekTotalMg.toFixed(1)} {compound.unit}/сед
+                        {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/сед
                       </p>
                     </div>
                   );
