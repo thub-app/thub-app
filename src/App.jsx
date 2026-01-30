@@ -79,6 +79,29 @@ const THUBApp = () => {
 
   const [injections, setInjections] = useState(() => loadFromStorage('thub-injections', {}));
 
+  // Location state - помни последната използвана локация и страна
+  const [selectedLocation, setSelectedLocation] = useState(() => {
+    const saved = loadFromStorage('thub-injections', {});
+    const keys = Object.keys(saved).sort().reverse();
+    for (const key of keys) {
+      if (saved[key]?.location) return saved[key].location;
+    }
+    return 'glute';
+  });
+
+  const [selectedSide, setSelectedSide] = useState(() => {
+    const saved = loadFromStorage('thub-injections', {});
+    const keys = Object.keys(saved).sort().reverse();
+    for (const key of keys) {
+      if (saved[key]?.side) return saved[key].side;
+    }
+    return 'left';
+  });
+
+  // Location modal state
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [pendingLocation, setPendingLocation] = useState(null);
+
   const [formData, setFormData] = useState(() => {
     const saved = migrateProfile(loadFromStorage('thub-profile', null));
     // За Sign In - полетата започват празни, браузърът прави autocomplete
@@ -196,15 +219,6 @@ const THUBApp = () => {
         field: 'Метод',
         from: methodLabels[oldProto.injectionMethod] || oldProto.injectionMethod,
         to: methodLabels[newProto.injectionMethod] || newProto.injectionMethod
-      });
-    }
-
-    if (oldProto.injectionLocation !== newProto.injectionLocation) {
-      const locationLabels = { glute: 'Глутеус', delt: 'Делтоид', quad: 'Бедро', abdomen: 'Корем' };
-      changes.push({
-        field: 'Локация',
-        from: locationLabels[oldProto.injectionLocation] || oldProto.injectionLocation,
-        to: locationLabels[newProto.injectionLocation] || newProto.injectionLocation
       });
     }
     
@@ -759,6 +773,132 @@ const THUBApp = () => {
             </select>
           </div>
 
+          {/* Weekly Dose */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
+              Седмична доза ({compound.unit})
+            </label>
+            <input
+              type="number"
+              value={protocolData.weeklyDose}
+              onChange={(e) => setProtocolData(prev => ({ ...prev, weeklyDose: parseFloat(e.target.value) || 0 }))}
+              style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+              className="w-full px-4 py-3 border rounded-xl focus:outline-none text-lg"
+            />
+          </div>
+
+          {/* Frequency */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
+              Честота
+            </label>
+            <select
+              value={protocolData.frequency}
+              onChange={(e) => setProtocolData(prev => ({ ...prev, frequency: e.target.value }))}
+              style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+              className="w-full px-4 py-3 border rounded-xl focus:outline-none"
+            >
+              {frequencies.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Protocol Start Date */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
+              Начало на протокола
+            </label>
+            <input
+              type="date"
+              value={protocolData.startDate}
+              onChange={(e) => setProtocolData(prev => ({ ...prev, startDate: e.target.value }))}
+              style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+              className="w-full px-4 py-3 border rounded-xl focus:outline-none"
+            />
+          </div>
+
+          {/* Graduation - Toggle Buttons */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
+              Скала на спринцовката
+            </label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setProtocolData(prev => ({ ...prev, graduation: 1 }))}
+                style={{ 
+                  backgroundColor: protocolData.graduation === 1 ? '#0891b2' : '#0a1628',
+                  borderColor: protocolData.graduation === 1 ? '#0891b2' : '#1e3a5f',
+                  color: 'white'
+                }}
+                className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
+              >
+                <div className="text-lg">1U</div>
+                <div style={{ color: protocolData.graduation === 1 ? '#cffafe' : '#64748b' }} className="text-xs">прецизна (0-50U)</div>
+              </button>
+              <button
+                onClick={() => setProtocolData(prev => ({ ...prev, graduation: 2 }))}
+                style={{ 
+                  backgroundColor: protocolData.graduation === 2 ? '#0891b2' : '#0a1628',
+                  borderColor: protocolData.graduation === 2 ? '#0891b2' : '#1e3a5f',
+                  color: 'white'
+                }}
+                className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
+              >
+                <div className="text-lg">2U</div>
+                <div style={{ color: protocolData.graduation === 2 ? '#cffafe' : '#64748b' }} className="text-xs">стандарт (0-100U)</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Injection Method */}
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="border rounded-2xl p-4"
+          >
+            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
+              Метод на инжектиране
+            </label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'im' }))}
+                style={{ 
+                  backgroundColor: protocolData.injectionMethod === 'im' ? '#0891b2' : '#0a1628',
+                  borderColor: protocolData.injectionMethod === 'im' ? '#0891b2' : '#1e3a5f',
+                  color: 'white'
+                }}
+                className="flex-1 py-3 border rounded-xl font-medium transition-colors"
+              >
+                💉 IM
+                <div style={{ color: protocolData.injectionMethod === 'im' ? '#cffafe' : '#64748b' }} className="text-xs">интрамускулно</div>
+              </button>
+              <button
+                onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'subq' }))}
+                style={{ 
+                  backgroundColor: protocolData.injectionMethod === 'subq' ? '#0891b2' : '#0a1628',
+                  borderColor: protocolData.injectionMethod === 'subq' ? '#0891b2' : '#1e3a5f',
+                  color: 'white'
+                }}
+                className="flex-1 py-3 border rounded-xl font-medium transition-colors"
+              >
+                💧 SubQ
+                <div style={{ color: protocolData.injectionMethod === 'subq' ? '#cffafe' : '#64748b' }} className="text-xs">подкожно</div>
+              </button>
+            </div>
+          </div>
+
           {/* Source */}
           <div 
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
@@ -810,163 +950,6 @@ const THUBApp = () => {
               <option value="other">Друго</option>
               <option value="unknown">Не знам</option>
             </select>
-          </div>
-
-          {/* Injection Method */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-4"
-          >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-              Метод на инжектиране
-            </label>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'im' }))}
-                style={{ 
-                  backgroundColor: protocolData.injectionMethod === 'im' ? '#0891b2' : '#0a1628',
-                  borderColor: protocolData.injectionMethod === 'im' ? '#0891b2' : '#1e3a5f',
-                  color: 'white'
-                }}
-                className="flex-1 py-3 border rounded-xl font-medium transition-colors"
-              >
-                💉 IM
-                <div style={{ color: protocolData.injectionMethod === 'im' ? '#cffafe' : '#64748b' }} className="text-xs">интрамускулно</div>
-              </button>
-              <button
-                onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'subq' }))}
-                style={{ 
-                  backgroundColor: protocolData.injectionMethod === 'subq' ? '#0891b2' : '#0a1628',
-                  borderColor: protocolData.injectionMethod === 'subq' ? '#0891b2' : '#1e3a5f',
-                  color: 'white'
-                }}
-                className="flex-1 py-3 border rounded-xl font-medium transition-colors"
-              >
-                💧 SubQ
-                <div style={{ color: protocolData.injectionMethod === 'subq' ? '#cffafe' : '#64748b' }} className="text-xs">подкожно</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Injection Location */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-4"
-          >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-              Локация
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { id: 'glute', label: 'Глутеус', emoji: '🍑' },
-                { id: 'delt', label: 'Делтоид', emoji: '💪' },
-                { id: 'quad', label: 'Бедро', emoji: '🦵' },
-                { id: 'abdomen', label: 'Корем', emoji: '⭕' }
-              ].map(loc => (
-                <button
-                  key={loc.id}
-                  onClick={() => setProtocolData(prev => ({ ...prev, injectionLocation: loc.id }))}
-                  style={{ 
-                    backgroundColor: protocolData.injectionLocation === loc.id ? '#0891b2' : '#0a1628',
-                    borderColor: protocolData.injectionLocation === loc.id ? '#0891b2' : '#1e3a5f',
-                    color: 'white'
-                  }}
-                  className="py-3 border rounded-xl font-medium transition-colors text-sm"
-                >
-                  {loc.emoji} {loc.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Weekly Dose */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-4"
-          >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              Седмична доза ({compound.unit})
-            </label>
-            <input
-              type="number"
-              value={protocolData.weeklyDose}
-              onChange={(e) => setProtocolData(prev => ({ ...prev, weeklyDose: parseFloat(e.target.value) || 0 }))}
-              style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
-              className="w-full px-4 py-3 border rounded-xl focus:outline-none text-lg"
-            />
-          </div>
-
-          {/* Frequency */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-4"
-          >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              Честота
-            </label>
-            <select
-              value={protocolData.frequency}
-              onChange={(e) => setProtocolData(prev => ({ ...prev, frequency: e.target.value }))}
-              style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
-              className="w-full px-4 py-3 border rounded-xl focus:outline-none"
-            >
-              {frequencies.map(f => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Graduation - Toggle Buttons */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-4"
-          >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-              Скала на спринцовката
-            </label>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setProtocolData(prev => ({ ...prev, graduation: 1 }))}
-                style={{ 
-                  backgroundColor: protocolData.graduation === 1 ? '#0891b2' : '#0a1628',
-                  borderColor: protocolData.graduation === 1 ? '#0891b2' : '#1e3a5f',
-                  color: 'white'
-                }}
-                className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
-              >
-                <div className="text-lg">1U</div>
-                <div style={{ color: protocolData.graduation === 1 ? '#cffafe' : '#64748b' }} className="text-xs">прецизна (0-50U)</div>
-              </button>
-              <button
-                onClick={() => setProtocolData(prev => ({ ...prev, graduation: 2 }))}
-                style={{ 
-                  backgroundColor: protocolData.graduation === 2 ? '#0891b2' : '#0a1628',
-                  borderColor: protocolData.graduation === 2 ? '#0891b2' : '#1e3a5f',
-                  color: 'white'
-                }}
-                className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
-              >
-                <div className="text-lg">2U</div>
-                <div style={{ color: protocolData.graduation === 2 ? '#cffafe' : '#64748b' }} className="text-xs">стандарт (0-100U)</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Protocol Start Date */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-4"
-          >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              Начало на протокола
-            </label>
-            <input
-              type="date"
-              value={protocolData.startDate}
-              onChange={(e) => setProtocolData(prev => ({ ...prev, startDate: e.target.value }))}
-              style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
-              className="w-full px-4 py-3 border rounded-xl focus:outline-none"
-            />
           </div>
 
           {/* Syringe Preview - ORIGINAL BIG VERSION */}
@@ -1434,7 +1417,7 @@ const THUBApp = () => {
         delete newState[todayKey];
         return newState;
       }
-      return { ...prev, [todayKey]: { time: timeStr, dose: unitsRounded } };
+      return { ...prev, [todayKey]: { time: timeStr, dose: unitsRounded, location: selectedLocation, side: selectedSide } };
     });
   };
 
@@ -1611,6 +1594,144 @@ const THUBApp = () => {
                     </div>
                   </div>
 
+                  {/* ОПГ - вътре в картата */}
+                  {rotation && rotation.lowerCount > 0 && rotation.higherCount > 0 && (
+                    <div 
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                      className="border rounded-xl p-3 mt-4"
+                    >
+                      <p style={{ color: '#22d3ee' }} className="font-semibold mb-2 text-sm">Оптимизация на графика</p>
+                      
+                      <div className="flex justify-center gap-2 mb-2">
+                        {(() => {
+                          const schedule = [];
+                          let higherUsed = 0;
+                          for (let i = 0; i < injectionsPerPeriod; i++) {
+                            const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
+                            if (higherUsed < expectedHigher) {
+                              schedule.push(rotation.higherUnits);
+                              higherUsed++;
+                            } else {
+                              schedule.push(rotation.lowerUnits);
+                            }
+                          }
+                          return schedule.map((units, i) => (
+                            <div 
+                              key={i}
+                              style={{ 
+                                backgroundColor: units === rotation.higherUnits ? '#0891b2' : '#164e63'
+                              }}
+                              className="px-2 py-1 rounded-lg"
+                            >
+                              <span className="text-white font-bold text-sm">{units}U</span>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                      
+                      <p style={{ color: '#94a3b8' }} className="text-xs text-center">
+                        {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {rotation.totalMg.toFixed(1)} {compound.unit}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Location Picker */}
+                  <div className="mt-4">
+                    <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
+                      Локация на инжекцията
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { id: 'glute', label: 'Глутеус', emoji: '🍑' },
+                        { id: 'delt', label: 'Делтоид', emoji: '💪' },
+                        { id: 'quad', label: 'Бедро', emoji: '🦵' },
+                        { id: 'abdomen', label: 'Корем', emoji: '⭕' }
+                      ].map(loc => (
+                        <button
+                          key={loc.id}
+                          onClick={() => {
+                            if (!todayCompleted) {
+                              setPendingLocation(loc);
+                              setShowLocationModal(true);
+                            }
+                          }}
+                          disabled={todayCompleted}
+                          style={{ 
+                            backgroundColor: selectedLocation === loc.id ? '#0891b2' : '#0a1628',
+                            borderColor: selectedLocation === loc.id ? '#0891b2' : '#1e3a5f',
+                            color: 'white',
+                            opacity: todayCompleted ? 0.5 : 1
+                          }}
+                          className="py-2 border rounded-xl font-medium transition-colors text-xs flex flex-col items-center"
+                        >
+                          <span className="text-lg">{loc.emoji}</span>
+                          <span>{loc.label}</span>
+                          {selectedLocation === loc.id && (
+                            <span style={{ color: '#22d3ee' }} className="text-xs mt-1">
+                              {selectedSide === 'left' ? 'Ляво' : 'Дясно'}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Location Side Modal */}
+                  {showLocationModal && pendingLocation && (
+                    <div 
+                      style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
+                      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    >
+                      <div 
+                        style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                        className="w-full max-w-sm border rounded-2xl p-6 shadow-2xl"
+                      >
+                        <div className="text-center mb-6">
+                          <span className="text-4xl">{pendingLocation.emoji}</span>
+                          <h3 className="text-white text-xl font-bold mt-2">{pendingLocation.label}</h3>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              setSelectedLocation(pendingLocation.id);
+                              setSelectedSide('left');
+                              setShowLocationModal(false);
+                              setPendingLocation(null);
+                            }}
+                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                            className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
+                          >
+                            Ляво
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedLocation(pendingLocation.id);
+                              setSelectedSide('right');
+                              setShowLocationModal(false);
+                              setPendingLocation(null);
+                            }}
+                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                            className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
+                          >
+                            Дясно
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setShowLocationModal(false);
+                            setPendingLocation(null);
+                          }}
+                          style={{ color: '#64748b' }}
+                          className="w-full mt-4 py-2 text-sm hover:text-white transition-colors"
+                        >
+                          Отказ
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Action Button */}
                   <button
                     onClick={toggleTodayInjection}
@@ -1621,54 +1742,17 @@ const THUBApp = () => {
                     }}
                     className="w-full mt-6 py-4 text-white font-semibold rounded-xl transition-all"
                   >
-                    {todayCompleted ? `✓ Направено ${injections[todayKey]?.time}` : '💉 Маркирай като направено'}
+                    {todayCompleted 
+                      ? `✓ Направено ${injections[todayKey]?.time} ${
+                          injections[todayKey]?.location === 'glute' ? '🍑' : 
+                          injections[todayKey]?.location === 'delt' ? '💪' : 
+                          injections[todayKey]?.location === 'quad' ? '🦵' : 
+                          injections[todayKey]?.location === 'abdomen' ? '⭕' : ''
+                        }${injections[todayKey]?.side === 'left' ? 'Л' : injections[todayKey]?.side === 'right' ? 'Д' : ''}`
+                      : '💉 Маркирай като направено'
+                    }
                   </button>
                 </div>
-
-                {/* ОПГ Card */}
-                {rotation && rotation.lowerCount > 0 && rotation.higherCount > 0 && (
-                  <div 
-                    style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                    className="border rounded-2xl p-4"
-                  >
-                    <p style={{ color: '#22d3ee' }} className="font-semibold mb-3">Оптимизация на графика</p>
-                    
-                    <div className="flex justify-center gap-2 mb-3">
-                      {(() => {
-                        // Build rotation schedule with even distribution
-                        const schedule = [];
-                        let higherUsed = 0;
-                        for (let i = 0; i < injectionsPerPeriod; i++) {
-                          const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
-                          if (higherUsed < expectedHigher) {
-                            schedule.push(rotation.higherUnits);
-                            higherUsed++;
-                          } else {
-                            schedule.push(rotation.lowerUnits);
-                          }
-                        }
-                        return schedule.map((units, i) => (
-                          <div 
-                            key={i}
-                            style={{ 
-                              backgroundColor: units === rotation.higherUnits ? '#0891b2' : '#164e63'
-                            }}
-                            className="px-3 py-2 rounded-lg"
-                          >
-                            <span className="text-white font-bold">{units}U</span>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    
-                    <p style={{ color: '#94a3b8' }} className="text-xs text-center">
-                      {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {rotation.totalMg.toFixed(1)} {compound.unit}
-                    </p>
-                    <p style={{ color: '#64748b' }} className="text-xs text-center mt-1">
-                      Делта: {rotation.delta >= 0 ? '+' : ''}{rotation.delta.toFixed(1)} {compound.unit} ({(rotation.deltaPct * 100).toFixed(2)}%)
-                    </p>
-                  </div>
-                )}
 
                 {/* Delta info (if no rotation) */}
                 {!rotation && Math.abs(deltaPct) > 0.01 && (
@@ -1840,8 +1924,16 @@ const THUBApp = () => {
                   const isInj = isInjectionDay(date);
                   const done = !!injections[dateKey];
                   const doneTime = injections[dateKey]?.time;
+                  const doneLocation = injections[dateKey]?.location;
+                  const doneSide = injections[dateKey]?.side;
                   const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
                   const dose = isInj ? getDoseForDate(date) : null;
+
+                  const locationEmoji = doneLocation === 'glute' ? '🍑' : 
+                                        doneLocation === 'delt' ? '💪' : 
+                                        doneLocation === 'quad' ? '🦵' : 
+                                        doneLocation === 'abdomen' ? '⭕' : '';
+                  const sideLabel = doneSide === 'left' ? 'Л' : doneSide === 'right' ? 'Д' : '';
 
                   cells.push(
                     <div
@@ -1854,7 +1946,7 @@ const THUBApp = () => {
                     >
                       <span className="text-white font-semibold">{day}</span>
                       {isInj && <span style={{ color: done ? '#d1fae5' : '#cffafe' }} className="text-xs">{dose}U</span>}
-                      {done && doneTime && <span style={{ color: '#d1fae5', fontSize: '8px' }}>{doneTime}</span>}
+                      {done && locationEmoji && <span style={{ fontSize: '10px' }}>{locationEmoji}{sideLabel}</span>}
                     </div>
                   );
                 }
@@ -1863,6 +1955,43 @@ const THUBApp = () => {
               })()}
             </div>
           </div>
+
+          {/* Последни инжекции */}
+          {Object.keys(injections).length > 0 && (
+            <div 
+              style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+              className="border rounded-2xl p-4 mt-4"
+            >
+              <h4 style={{ color: '#64748b' }} className="text-sm font-medium mb-3">Последни инжекции</h4>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(injections)
+                  .sort((a, b) => {
+                    const [aYear, aMonth, aDay] = a[0].split('-').map(Number);
+                    const [bYear, bMonth, bDay] = b[0].split('-').map(Number);
+                    return new Date(bYear, bMonth, bDay) - new Date(aYear, aMonth, aDay);
+                  })
+                  .slice(0, 10)
+                  .map(([dateKey, data]) => {
+                    const [year, month, day] = dateKey.split('-').map(Number);
+                    const emoji = data.location === 'glute' ? '🍑' : 
+                                  data.location === 'delt' ? '💪' : 
+                                  data.location === 'quad' ? '🦵' : 
+                                  data.location === 'abdomen' ? '⭕' : '💉';
+                    const side = data.side === 'left' ? 'Л' : data.side === 'right' ? 'Д' : '';
+                    return (
+                      <div 
+                        key={dateKey}
+                        style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                        className="border rounded-lg px-3 py-2 flex items-center gap-2"
+                      >
+                        <span className="text-sm">{emoji}{side}</span>
+                        <span style={{ color: '#64748b' }} className="text-xs">{day}.{month + 1}</span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         )}
 
         {/* STATS TAB */}
@@ -1933,15 +2062,6 @@ const THUBApp = () => {
                 <div className="flex justify-between">
                   <span style={{ color: '#64748b' }}>Метод</span>
                   <span className="text-white">{proto.injectionMethod === 'im' ? '💉 IM' : '💧 SubQ'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Локация</span>
-                  <span className="text-white">
-                    {proto.injectionLocation === 'glute' ? '🍑 Глутеус' : 
-                     proto.injectionLocation === 'delt' ? '💪 Делтоид' : 
-                     proto.injectionLocation === 'quad' ? '🦵 Бедро' : 
-                     proto.injectionLocation === 'abdomen' ? '⭕ Корем' : 'Не е зададено'}
-                  </span>
                 </div>
               </div>
             </div>
