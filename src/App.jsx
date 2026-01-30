@@ -1702,95 +1702,105 @@ const THUBApp = () => {
                 </div>
 
                 {/* Седмичен график */}
-                <div 
-                  style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                  className="border rounded-2xl p-4"
-                >
-                  <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">Седмичен график</p>
+                {(() => {
+                  // Генерираме седмицата Пн-Нд
+                  const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+                  const todayDayOfWeek = today.getDay(); // 0=Нд, 1=Пн...
                   
-                  <div className="overflow-x-auto pb-2">
-                    <div className="flex gap-2 min-w-max justify-center">
-                      {(() => {
-                        // Генерираме седмицата Пн-Нд
-                        const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
-                        const todayDayOfWeek = today.getDay(); // 0=Нд, 1=Пн...
-                        
-                        // Намираме понеделника на тази седмица
-                        const mondayOfWeek = new Date(today);
-                        const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
-                        mondayOfWeek.setDate(today.getDate() - daysFromMonday);
-                        
-                        return weekDays.map((dayName, i) => {
-                          // Датата за този ден
-                          const dayDate = new Date(mondayOfWeek);
-                          dayDate.setDate(mondayOfWeek.getDate() + i);
-                          
-                          const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
-                          const isInjDay = isInjectionDay(dayDate);
-                          const dose = isInjDay ? getDoseForDate(dayDate) : 0;
-                          const isCompleted = !!injections[dayKey];
-                          const isToday = dayDate.toDateString() === today.toDateString();
-                          const isPast = dayDate < today && !isToday;
-                          const isFuture = dayDate > today;
-                          
-                          // Определяме цвета
-                          let bgColor = '#0891b2'; // cyan - предстои
-                          if (isCompleted) bgColor = '#059669'; // зелен - направено
-                          
-                          // Може ли да се кликне (само ако е инжекционен ден и не е бъдещ)
-                          const canClick = isInjDay && !isFuture;
-                          
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => {
-                                if (!canClick) return;
-                                const timeStr = isToday 
-                                  ? `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}`
-                                  : '12:00';
-                                setInjections(prev => {
-                                  if (prev[dayKey]) {
-                                    const newState = { ...prev };
-                                    delete newState[dayKey];
-                                    return newState;
-                                  }
-                                  return { ...prev, [dayKey]: { time: timeStr, dose: dose, location: selectedLocation, side: selectedSide } };
-                                });
-                              }}
-                              disabled={!canClick}
-                              style={{ 
-                                backgroundColor: bgColor,
-                                minWidth: '44px',
-                                cursor: canClick ? 'pointer' : 'default',
-                                opacity: isFuture ? 0.6 : 1,
-                                animation: isToday ? 'pulse 2s infinite' : 'none',
-                                boxShadow: isToday ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
-                              }}
-                              className="px-2 py-2 rounded-lg text-center border-0"
-                            >
-                              <div style={{ color: 'white', fontSize: '10px', opacity: 0.8 }}>{dayName}</div>
-                              <div style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>{dose}U</div>
-                            </button>
-                          );
-                        });
-                      })()}
+                  // Намираме понеделника на тази седмица
+                  const mondayOfWeek = new Date(today);
+                  const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
+                  mondayOfWeek.setDate(today.getDate() - daysFromMonday);
+                  
+                  // Изчисляваме статистика за седмицата
+                  const weekData = weekDays.map((dayName, i) => {
+                    const dayDate = new Date(mondayOfWeek);
+                    dayDate.setDate(mondayOfWeek.getDate() + i);
+                    
+                    const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
+                    const isInjDay = isInjectionDay(dayDate);
+                    const dose = isInjDay ? (getDoseForDate(dayDate) || unitsRounded) : 0;
+                    const isCompleted = !!injections[dayKey];
+                    const isToday = dayDate.toDateString() === today.toDateString();
+                    const isFuture = dayDate > today;
+                    
+                    return { dayName, dayDate, dayKey, isInjDay, dose, isCompleted, isToday, isFuture };
+                  });
+                  
+                  // Броим инжекции и дози за текущата седмица
+                  const weekInjections = weekData.filter(d => d.isInjDay);
+                  const weekTotalMg = weekInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
+                  
+                  // Групираме дозите за формулата
+                  const doseCounts = {};
+                  weekInjections.forEach(d => {
+                    doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1;
+                  });
+                  const doseFormula = Object.entries(doseCounts)
+                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                    .map(([dose, count]) => `${count}×${dose}U`)
+                    .join(' + ');
+                  
+                  return (
+                    <div 
+                      style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                      className="border rounded-2xl p-4"
+                    >
+                      <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">Седмичен график</p>
+                      
+                      <div className="overflow-x-auto pb-2">
+                        <div className="flex gap-2 min-w-max justify-center">
+                          {weekData.map((day, i) => {
+                            // Определяме цвета
+                            let bgColor = '#0891b2'; // cyan - предстои
+                            if (day.isCompleted) bgColor = '#059669'; // зелен - направено
+                            
+                            // Може ли да се кликне (само ако е инжекционен ден и не е бъдещ)
+                            const canClick = day.isInjDay && !day.isFuture;
+                            
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  if (!canClick) return;
+                                  const timeStr = day.isToday 
+                                    ? `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}`
+                                    : '12:00';
+                                  setInjections(prev => {
+                                    if (prev[day.dayKey]) {
+                                      const newState = { ...prev };
+                                      delete newState[day.dayKey];
+                                      return newState;
+                                    }
+                                    return { ...prev, [day.dayKey]: { time: timeStr, dose: day.dose, location: selectedLocation, side: selectedSide } };
+                                  });
+                                }}
+                                disabled={!canClick}
+                                style={{ 
+                                  backgroundColor: bgColor,
+                                  minWidth: '44px',
+                                  cursor: canClick ? 'pointer' : 'default',
+                                  opacity: day.isFuture ? 0.6 : 1,
+                                  animation: day.isToday ? 'pulse 2s infinite' : 'none',
+                                  boxShadow: day.isToday ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
+                                }}
+                                className="px-2 py-2 rounded-lg text-center border-0"
+                              >
+                                <div style={{ color: 'white', fontSize: '10px', opacity: 0.8 }}>{day.dayName}</div>
+                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '14px' }}>{day.dose}U</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      
+                      {/* Формула за текущата седмица */}
+                      <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
+                        {doseFormula} = {weekTotalMg.toFixed(1)} {compound.unit}/сед
+                      </p>
                     </div>
-                  </div>
-                  
-                  {/* Показваме формулата ако има rotation */}
-                  {rotation && rotation.lowerCount > 0 && rotation.higherCount > 0 && (
-                    <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
-                      {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {(proto.frequency === 'EOD' ? rotation.totalMg / 2 : rotation.totalMg).toFixed(1)} {compound.unit}/сед
-                    </p>
-                  )}
-                  
-                  {/* Ако няма rotation, показваме седмичната доза */}
-                  {(!rotation || rotation.lowerCount === 0 || rotation.higherCount === 0) && (
-                    <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
-                      {freq.perWeek}×{unitsRounded}U = {actualWeekly.toFixed(1)} {compound.unit}/сед
-                    </p>
-                  )}
-                </div>
+                  );
+                })()}
                 
                 {/* CSS за pulse анимация */}
                 <style>{`
