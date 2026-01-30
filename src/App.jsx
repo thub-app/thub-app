@@ -1876,6 +1876,7 @@ const THUBApp = () => {
 
         {/* CALENDAR TAB */}
         {activeTab === 'calendar' && (
+          <>
           <div 
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="border rounded-2xl p-4"
@@ -1992,6 +1993,7 @@ const THUBApp = () => {
               </div>
             </div>
           )}
+          </>
         )}
 
         {/* STATS TAB */}
