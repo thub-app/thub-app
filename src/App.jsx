@@ -1540,14 +1540,18 @@ const THUBApp = () => {
       {/* Header */}
       <header 
         style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-        className="px-4 py-2 flex items-center sticky top-0 z-40 border-b"
+        className="px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b"
       >
         <div 
           style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
-          className="w-10 h-10 rounded-lg border flex items-center justify-center"
+          className="w-12 h-12 rounded-xl border-2 flex items-center justify-center"
         >
-          <span className="text-white text-xs font-black">THUB</span>
+          <span className="text-white text-sm font-black">THUB</span>
         </div>
+        <p className="text-white text-lg font-semibold">
+          <span style={{ color: '#64748b' }}>{dayNames[today.getDay()]}, </span>
+          {today.getDate()} {monthNames[today.getMonth()]}
+        </p>
       </header>
 
       {/* Content */}
@@ -1556,14 +1560,6 @@ const THUBApp = () => {
         {/* TODAY TAB */}
         {activeTab === 'today' && (
           <div className="space-y-4">
-            
-            {/* Date */}
-            <div className="text-center">
-              <p className="text-white text-2xl font-bold">
-                <span style={{ color: '#64748b' }}>{dayNames[today.getDay()]}, </span>
-                {today.getDate()} {monthNames[today.getMonth()]}
-              </p>
-            </div>
 
             {todayIsInjectionDay ? (
               <>
@@ -1592,9 +1588,6 @@ const THUBApp = () => {
 
                   {/* Location Picker */}
                   <div className="mt-4">
-                    <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                      Локация на инжекцията
-                    </label>
                     <div className="grid grid-cols-4 gap-2">
                       {[
                         { id: 'glute', label: 'Глутеус', emoji: '🍑' },
@@ -1617,13 +1610,12 @@ const THUBApp = () => {
                             color: 'white',
                             opacity: todayCompleted ? 0.5 : 1
                           }}
-                          className="py-2 border rounded-xl font-medium transition-colors text-xs flex flex-col items-center"
+                          className="py-3 border rounded-xl font-medium transition-colors text-sm flex items-center justify-center"
                         >
-                          <span className="text-lg">{loc.emoji}</span>
                           <span>{loc.label}</span>
-                          {selectedLocation === loc.id && (
-                            <span style={{ color: '#22d3ee' }} className="text-xs mt-1">
-                              {selectedSide === 'left' ? 'Ляво' : 'Дясно'}
+                          {selectedLocation === loc.id && selectedSide && (
+                            <span style={{ color: '#22d3ee' }} className="ml-1">
+                              {selectedSide === 'left' ? 'Л' : 'Д'}
                             </span>
                           )}
                         </button>
@@ -1717,35 +1709,38 @@ const THUBApp = () => {
                   >
                     <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">Оптимизация на графика</p>
                     
-                    <div className="flex justify-center gap-2 mb-2 flex-wrap">
-                      {(() => {
-                        const schedule = [];
-                        let higherUsed = 0;
-                        for (let i = 0; i < injectionsPerPeriod; i++) {
-                          const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
-                          if (higherUsed < expectedHigher) {
-                            schedule.push(rotation.higherUnits);
-                            higherUsed++;
-                          } else {
-                            schedule.push(rotation.lowerUnits);
+                    <div className="overflow-x-auto pb-2">
+                      <div className="flex gap-2 min-w-max justify-center">
+                        {(() => {
+                          const schedule = [];
+                          let higherUsed = 0;
+                          for (let i = 0; i < injectionsPerPeriod; i++) {
+                            const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
+                            if (higherUsed < expectedHigher) {
+                              schedule.push(rotation.higherUnits);
+                              higherUsed++;
+                            } else {
+                              schedule.push(rotation.lowerUnits);
+                            }
                           }
-                        }
-                        return schedule.map((units, i) => (
-                          <div 
-                            key={i}
-                            style={{ 
-                              backgroundColor: units === rotation.higherUnits ? '#0891b2' : '#164e63'
-                            }}
-                            className="px-3 py-2 rounded-lg"
-                          >
-                            <span className="text-white font-bold">{units}U</span>
-                          </div>
-                        ));
-                      })()}
+                          return schedule.map((units, i) => (
+                            <div 
+                              key={i}
+                              style={{ 
+                                backgroundColor: units === rotation.higherUnits ? '#0891b2' : '#164e63',
+                                minWidth: '44px'
+                              }}
+                              className="px-3 py-2 rounded-lg text-center"
+                            >
+                              <span className="text-white font-bold">{units}U</span>
+                            </div>
+                          ));
+                        })()}
+                      </div>
                     </div>
                     
                     <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
-                      {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {rotation.totalMg.toFixed(1)} {compound.unit}
+                      {rotation.lowerCount}×{rotation.lowerUnits}U + {rotation.higherCount}×{rotation.higherUnits}U = {(proto.frequency === 'EOD' ? rotation.totalMg / 2 : rotation.totalMg).toFixed(1)} {compound.unit}/сед
                     </p>
                   </div>
                 )}
