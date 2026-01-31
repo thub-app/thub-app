@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
+coimport { useState, useEffect } from 'react';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+
 const THUBApp = () => {
   // ============ STORAGE (localStorage for local/production) ============
   const loadFromStorage = (key, defaultValue) => {
@@ -545,6 +548,30 @@ const THUBApp = () => {
         // Зареждаме от storage за да сме сигурни че имаме актуални данни
         const savedProfile = loadFromStorage('thub-profile', null);
         
+        // Проверяваме дали email-ът match-ва
+        if (savedProfile && savedProfile.email && savedProfile.email.toLowerCase() !== formData.email.toLowerCase()) {
+          // Email не match-ва - изчистваме старите данни и започваме от нулата
+          console.log('Email mismatch - clearing old data');
+          localStorage.removeItem('thub-profile');
+          localStorage.removeItem('thub-injections');
+          localStorage.removeItem('thub-protocol');
+          
+          // Създаваме нов профил
+          const newProfile = {
+            name: '',
+            email: formData.email.trim(),
+            password: formData.password,
+            rememberMe: formData.rememberMe || false,
+            protocolConfigured: false,
+            createdAt: new Date().toISOString()
+          };
+          setProfile(newProfile);
+          saveToStorage('thub-profile', newProfile);
+          setInjections({});
+          setCurrentStep('protocol'); // Отиваме да настрои протокола
+          return;
+        }
+        
         const updatedProfile = {
           ...savedProfile,
           rememberMe: formData.rememberMe || false,
@@ -706,7 +733,13 @@ const THUBApp = () => {
               </div>
             </div>
 
-            <div className="space-y-5">
+            <form 
+              className="space-y-5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleOnboardingSubmit();
+              }}
+            >
               {/* Sign Up Fields */}
               {authMode === 'signup' && (
                 <>
@@ -716,6 +749,8 @@ const THUBApp = () => {
                     </label>
                     <input
                       type="text"
+                      name="name"
+                      autoComplete="name"
                       value={formData.name}
                       onChange={(e) => {
                         setFormData(prev => ({ ...prev, name: e.target.value }));
@@ -828,7 +863,7 @@ const THUBApp = () => {
 
               {/* Submit Button */}
               <button
-                onClick={handleOnboardingSubmit}
+                type="submit"
                 style={{ background: 'linear-gradient(90deg, #06b6d4, #14b8a6)' }}
                 className="w-full py-4 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:opacity-90 mt-2"
               >
@@ -841,7 +876,7 @@ const THUBApp = () => {
                   Забравена парола?
                 </p>
               )}
-            </div>
+            </form>
             
             {/* Dev Reset Button */}
             <button
