@@ -240,12 +240,8 @@ const THUBApp = () => {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const [currentStep, setCurrentStep] = useState(() => {
-    const saved = migrateProfile(loadFromStorage('thub-profile', null));
-    if (!saved || !saved.name) return 'onboarding';
-    if (!saved.protocolConfigured) return 'protocol';
-    return 'main';
-  });
+  // Започваме в 'loading' докато проверим Supabase сесията
+  const [currentStep, setCurrentStep] = useState('loading');
 
   const [profile, setProfile] = useState(() => migrateProfile(loadFromStorage('thub-profile', {
     name: '',
@@ -351,19 +347,81 @@ const THUBApp = () => {
 
   // Save injections when changed
   useEffect(() => {
-    saveToStorage('thub-injections', injections);
-  }, [injections]);
+    if (session && session.user) {
+      saveToStorage('thub-injections-' + session.user.email, injections);
+    } else if (Object.keys(injections).length > 0) {
+      // Fallback за demo mode
+      saveToStorage('thub-injections', injections);
+    }
+  }, [injections, session]);
 
 
   // ============ SUPABASE AUTH ============
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      
+      if (session && session.user) {
+        // Има активна сесия - зареждаме профила по email
+        const userEmail = session.user.email;
+        const savedProfile = loadFromStorage('thub-profile-' + userEmail, null);
+        
+        if (savedProfile && savedProfile.protocolConfigured && savedProfile.protocol) {
+          // Има профил с протокол - влизаме директно
+          setProfile(savedProfile);
+          setProtocolData({
+            ...savedProfile.protocol,
+            source: savedProfile.protocol.source || 'unknown',
+            oilType: savedProfile.protocol.oilType || 'unknown',
+            injectionMethod: savedProfile.protocol.injectionMethod || 'im',
+            injectionLocation: savedProfile.protocol.injectionLocation || 'glute'
+          });
+          
+          // Зареждаме и инжекциите за този потребител
+          const savedInjections = loadFromStorage('thub-injections-' + userEmail, {});
+          setInjections(savedInjections);
+          
+          setCurrentStep('main');
+          setActiveTab('today');
+        } else if (savedProfile) {
+          // Има профил но няма протокол
+          setProfile(savedProfile);
+          setCurrentStep('protocol');
+        } else {
+          // Има сесия но няма локален профил - създаваме го
+          const newProfile = {
+            name: session.user.user_metadata?.name || '',
+            email: userEmail,
+            rememberMe: true,
+            protocolConfigured: false,
+            createdAt: new Date().toISOString()
+          };
+          setProfile(newProfile);
+          saveToStorage('thub-profile-' + userEmail, newProfile);
+          setCurrentStep('protocol');
+        }
+      } else {
+        // Няма сесия - показваме onboarding
+        setCurrentStep('onboarding');
+      }
+      
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      
+      if (event === 'SIGNED_OUT') {
+        // Logout - чистим и показваме onboarding
+        setCurrentStep('onboarding');
+        setProfile({
+          name: '',
+          email: '',
+          rememberMe: false,
+          protocolConfigured: false
+        });
+        setInjections({});
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -670,7 +728,11 @@ const THUBApp = () => {
     };
     
     setProfile(newProfile);
-    saveToStorage('thub-profile', newProfile);
+    
+    // Записваме към ключ с email-а на потребителя
+    const storageKey = profile.email ? 'thub-profile-' + profile.email : 'thub-profile';
+    saveToStorage(storageKey, newProfile);
+    
     setShowChangeModal(false);
     setDetectedChanges([]);
     setChangeReason('');
@@ -688,6 +750,23 @@ const THUBApp = () => {
   };
 
   // ============ RENDER ============
+  
+  // Loading Screen - докато проверяваме Supabase сесията
+  if (currentStep === 'loading') {
+    return (
+      <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }} className="flex items-center justify-center">
+        <div className="text-center">
+          <div 
+            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+            className="w-20 h-20 rounded-2xl border-2 flex items-center justify-center mb-4 mx-auto"
+          >
+            <span className="text-white text-lg font-black tracking-tight">THUB</span>
+          </div>
+          <p style={{ color: '#64748b' }}>Зареждане...</p>
+        </div>
+      </div>
+    );
+  }
   
   // Onboarding Screen
   if (currentStep === 'onboarding') {
