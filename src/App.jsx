@@ -123,7 +123,7 @@ const THUBApp = () => {
       bioavailability: methodMod.bioavailability,
       modifiers: {
         method: method === 'subq' ? 'SubQ' : 'IM',
-        oil: oilType !== 'unknown' ? oilType.toUpperCase().replace('_', ' ') : null,
+        oil: (oilType && oilType !== 'unknown') ? oilType.toUpperCase().replace('_', ' ') : null,
         site: site,
       }
     };
@@ -1500,8 +1500,21 @@ const THUBApp = () => {
   const monthNames = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
   const dayNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
-  // Get protocol from profile
+  // Get protocol from profile - with safety defaults
   const proto = profile.protocol || protocolData;
+  
+  // Safety check - ensure all required fields exist
+  if (!proto || !proto.compound || !proto.frequency || !proto.weeklyDose) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#0a1628' }}>
+        <div className="text-center">
+          <p className="text-white text-xl mb-4">Зареждане...</p>
+          <p style={{ color: '#64748b' }}>Моля изчакайте</p>
+        </div>
+      </div>
+    );
+  }
+  
   const compound = compounds.find(c => c.id === proto.compound) || compounds[0];
   const freq = frequenciesData.find(f => f.id === proto.frequency) || frequenciesData[1];
 
@@ -1519,9 +1532,9 @@ const THUBApp = () => {
   // Get PK parameters for main view
   const pkParamsMain = getPkParameters(
     proto.compound,
-    proto.injectionMethod,
-    proto.oilType,
-    proto.injectionLocation,
+    proto.injectionMethod || 'im',
+    proto.oilType || 'unknown',
+    proto.injectionLocation || 'delt',
     actualMl
   );
 
