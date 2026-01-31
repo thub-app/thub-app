@@ -331,6 +331,18 @@ const THUBApp = () => {
   const [showChangeModal, setShowChangeModal] = useState(false);
   const [detectedChanges, setDetectedChanges] = useState([]);
   const [changeReason, setChangeReason] = useState('');
+  
+  // Calendar modals
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showInjectionModal, setShowInjectionModal] = useState(false);
+  const [showAddInjectionModal, setShowAddInjectionModal] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [injectionFormData, setInjectionFormData] = useState({
+    time: '09:00',
+    dose: 0,
+    location: 'delt',
+    side: 'left'
+  });
 
   // Save injections when changed
   useEffect(() => {
@@ -1749,6 +1761,86 @@ const THUBApp = () => {
 
   const todayDose = getDoseForDate(today) || unitsRounded;
 
+  // ============ CALENDAR HANDLERS ============
+  const handleDayClick = (date, isInjDay, hasInjection) => {
+    const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    setSelectedDate({ date, dateKey });
+
+    if (isInjDay && hasInjection) {
+      // Show details modal for existing injection
+      setShowInjectionModal(true);
+    } else if (isInjDay && !hasInjection) {
+      // Show add form for planned injection day
+      const defaultDose = getDoseForDate(date) || unitsRounded;
+      setInjectionFormData({
+        time: '09:00',
+        dose: defaultDose,
+        location: proto.injectionLocation || 'delt',
+        side: 'left'
+      });
+      setShowAddInjectionModal(true);
+    } else {
+      // Show warning for non-injection day
+      setShowWarningModal(true);
+    }
+  };
+
+  const handleAddInjection = () => {
+    if (!selectedDate) return;
+    
+    setInjections(prev => ({
+      ...prev,
+      [selectedDate.dateKey]: {
+        time: injectionFormData.time,
+        dose: injectionFormData.dose,
+        location: injectionFormData.location,
+        side: injectionFormData.side
+      }
+    }));
+    
+    setShowAddInjectionModal(false);
+    setShowWarningModal(false);
+    setSelectedDate(null);
+  };
+
+  const handleEditInjection = () => {
+    if (!selectedDate) return;
+    
+    const existing = injections[selectedDate.dateKey];
+    setInjectionFormData({
+      time: existing.time || '09:00',
+      dose: existing.dose || unitsRounded,
+      location: existing.location || 'delt',
+      side: existing.side || 'left'
+    });
+    
+    setShowInjectionModal(false);
+    setShowAddInjectionModal(true);
+  };
+
+  const handleDeleteInjection = () => {
+    if (!selectedDate) return;
+    if (!window.confirm('Сигурен ли си че искаш да изтриеш тази инжекция?')) return;
+    
+    setInjections(prev => {
+      const newState = { ...prev };
+      delete newState[selectedDate.dateKey];
+      return newState;
+    });
+    
+    setShowInjectionModal(false);
+    setSelectedDate(null);
+  };
+
+  const closeAllModals = () => {
+    setShowInjectionModal(false);
+    setShowAddInjectionModal(false);
+    setShowWarningModal(false);
+    setSelectedDate(null);
+  };
+
+  // ============ SYRINGE COMPONENT ============
+
   // Syringe component for main view - with logo inside
   const SyringeMain = ({ units }) => {
     const maxUnits = proto.graduation === 1 ? 50 : 100;
@@ -2304,11 +2396,13 @@ const THUBApp = () => {
                   cells.push(
                     <div
                       key={day}
+                      onClick={() => handleDayClick(date, isInj, done)}
                       style={{ 
                         backgroundColor: isInj ? (done ? '#059669' : '#0891b2') : '#1e293b',
-                        borderColor: isToday ? '#22d3ee' : 'transparent'
+                        borderColor: isToday ? '#22d3ee' : 'transparent',
+                        cursor: 'pointer'
                       }}
-                      className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs border-2`}
+                      className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs border-2 hover:opacity-80 transition-opacity`}
                     >
                       <span className="text-white font-semibold">{day}</span>
                       {isInj && <span style={{ color: done ? '#d1fae5' : '#cffafe' }} className="text-xs">{dose}U</span>}
@@ -2355,6 +2449,241 @@ const THUBApp = () => {
                       </div>
                     );
                   })}
+              </div>
+            </div>
+          )}
+
+          {/* ============ INJECTION DETAILS MODAL ============ */}
+          {showInjectionModal && selectedDate && injections[selectedDate.dateKey] && (
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={closeAllModals}
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                className="border-2 rounded-2xl p-6 max-w-md w-full"
+              >
+                <h3 className="text-white text-xl font-bold mb-4">
+                  Инжекция {selectedDate.date.getDate()}.{selectedDate.date.getMonth() + 1}.{selectedDate.date.getFullYear()}
+                </h3>
+                
+                {(() => {
+                  const inj = injections[selectedDate.dateKey];
+                  const locationName = inj.location === 'glute' ? '🍑 Глутеус' :
+                                      inj.location === 'delt' ? '💪 Дълтовид' :
+                                      inj.location === 'quad' ? '🦵 Квадрицепс' :
+                                      inj.location === 'abdomen' ? '⭕ Коремна област' : 'Неизвестно';
+                  const sideName = inj.side === 'left' ? 'Ляво' : inj.side === 'right' ? 'Дясно' : '';
+                  
+                  return (
+                    <div className="space-y-3 mb-6">
+                      <div className="flex justify-between">
+                        <span style={{ color: '#64748b' }}>Час:</span>
+                        <span className="text-white font-semibold">{inj.time}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: '#64748b' }}>Доза:</span>
+                        <span style={{ color: '#22d3ee' }} className="font-bold">{inj.dose}U</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: '#64748b' }}>Локация:</span>
+                        <span className="text-white">{locationName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span style={{ color: '#64748b' }}>Страна:</span>
+                        <span className="text-white">{sideName}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDeleteInjection}
+                    style={{ backgroundColor: '#7f1d1d' }}
+                    className="flex-1 py-3 rounded-xl text-white font-semibold hover:bg-red-900 transition-colors"
+                  >
+                    🗑️ Изтрий
+                  </button>
+                  <button
+                    onClick={handleEditInjection}
+                    style={{ backgroundColor: '#1e3a5f' }}
+                    className="flex-1 py-3 rounded-xl text-white font-semibold hover:bg-slate-700 transition-colors"
+                  >
+                    ✏️ Редактирай
+                  </button>
+                  <button
+                    onClick={closeAllModals}
+                    style={{ backgroundColor: '#334155' }}
+                    className="flex-1 py-3 rounded-xl text-white font-semibold hover:bg-slate-600 transition-colors"
+                  >
+                    Затвори
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============ ADD/EDIT INJECTION MODAL ============ */}
+          {showAddInjectionModal && selectedDate && (
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={closeAllModals}
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                className="border-2 rounded-2xl p-6 max-w-md w-full"
+              >
+                <h3 className="text-white text-xl font-bold mb-4">
+                  Добави инжекция
+                </h3>
+                <p style={{ color: '#64748b' }} className="text-sm mb-4">
+                  {selectedDate.date.getDate()}.{selectedDate.date.getMonth() + 1}.{selectedDate.date.getFullYear()}
+                </p>
+
+                <div className="space-y-4 mb-6">
+                  {/* Time */}
+                  <div>
+                    <label style={{ color: '#64748b' }} className="block text-sm mb-2">Час</label>
+                    <input
+                      type="time"
+                      value={injectionFormData.time}
+                      onChange={(e) => setInjectionFormData(prev => ({ ...prev, time: e.target.value }))}
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                      className="w-full p-3 border rounded-xl text-white"
+                    />
+                  </div>
+
+                  {/* Dose */}
+                  <div>
+                    <label style={{ color: '#64748b' }} className="block text-sm mb-2">Доза (Units)</label>
+                    <input
+                      type="number"
+                      value={injectionFormData.dose}
+                      onChange={(e) => setInjectionFormData(prev => ({ ...prev, dose: parseFloat(e.target.value) || 0 }))}
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                      className="w-full p-3 border rounded-xl text-white"
+                    />
+                  </div>
+
+                  {/* Location */}
+                  <div>
+                    <label style={{ color: '#64748b' }} className="block text-sm mb-2">Локация</label>
+                    <select
+                      value={injectionFormData.location}
+                      onChange={(e) => setInjectionFormData(prev => ({ ...prev, location: e.target.value }))}
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                      className="w-full p-3 border rounded-xl text-white"
+                    >
+                      <option value="glute">🍑 Глутеус</option>
+                      <option value="delt">💪 Дълтовид</option>
+                      <option value="quad">🦵 Квадрицепс</option>
+                      <option value="abdomen">⭕ Коремна област</option>
+                    </select>
+                  </div>
+
+                  {/* Side */}
+                  <div>
+                    <label style={{ color: '#64748b' }} className="block text-sm mb-2">Страна</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setInjectionFormData(prev => ({ ...prev, side: 'left' }))}
+                        style={{
+                          backgroundColor: injectionFormData.side === 'left' ? '#1e3a5f' : '#0a1628',
+                          borderColor: injectionFormData.side === 'left' ? '#22d3ee' : '#1e3a5f',
+                          color: injectionFormData.side === 'left' ? '#22d3ee' : '#64748b'
+                        }}
+                        className="flex-1 p-3 border-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Ляво
+                      </button>
+                      <button
+                        onClick={() => setInjectionFormData(prev => ({ ...prev, side: 'right' }))}
+                        style={{
+                          backgroundColor: injectionFormData.side === 'right' ? '#1e3a5f' : '#0a1628',
+                          borderColor: injectionFormData.side === 'right' ? '#22d3ee' : '#1e3a5f',
+                          color: injectionFormData.side === 'right' ? '#22d3ee' : '#64748b'
+                        }}
+                        className="flex-1 p-3 border-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Дясно
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={closeAllModals}
+                    style={{ backgroundColor: '#334155' }}
+                    className="flex-1 py-3 rounded-xl text-white font-semibold hover:bg-slate-600 transition-colors"
+                  >
+                    Отказ
+                  </button>
+                  <button
+                    onClick={handleAddInjection}
+                    style={{ background: 'linear-gradient(90deg, #06b6d4, #14b8a6)' }}
+                    className="flex-1 py-3 rounded-xl text-white font-bold hover:opacity-90 transition-opacity"
+                  >
+                    ✅ Запази
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============ WARNING MODAL (non-injection day) ============ */}
+          {showWarningModal && selectedDate && (
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+              onClick={closeAllModals}
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                style={{ backgroundColor: '#0f172a', borderColor: '#f59e0b' }}
+                className="border-2 rounded-2xl p-6 max-w-md w-full"
+              >
+                <div className="text-center mb-4">
+                  <span className="text-5xl">⚠️</span>
+                </div>
+                <h3 className="text-white text-xl font-bold mb-2 text-center">
+                  Внимание
+                </h3>
+                <p style={{ color: '#f59e0b' }} className="text-center mb-4">
+                  {selectedDate.date.getDate()}.{selectedDate.date.getMonth() + 1}.{selectedDate.date.getFullYear()} не е планиран injection day според твоя протокол
+                </p>
+                <p style={{ color: '#64748b' }} className="text-sm text-center mb-6">
+                  Сигурен ли си че искаш да добавиш инжекция в този ден?
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={closeAllModals}
+                    style={{ backgroundColor: '#334155' }}
+                    className="flex-1 py-3 rounded-xl text-white font-semibold hover:bg-slate-600 transition-colors"
+                  >
+                    Отказ
+                  </button>
+                  <button
+                    onClick={() => {
+                      const defaultDose = getDoseForDate(selectedDate.date) || unitsRounded;
+                      setInjectionFormData({
+                        time: '09:00',
+                        dose: defaultDose,
+                        location: proto.injectionLocation || 'delt',
+                        side: 'left'
+                      });
+                      setShowWarningModal(false);
+                      setShowAddInjectionModal(true);
+                    }}
+                    style={{ background: 'linear-gradient(90deg, #f59e0b, #f97316)' }}
+                    className="flex-1 py-3 rounded-xl text-white font-bold hover:opacity-90 transition-opacity"
+                  >
+                    ✅ Добави инжекция
+                  </button>
+                </div>
               </div>
             </div>
           )}
