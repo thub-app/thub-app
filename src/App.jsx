@@ -39,6 +39,201 @@ const THUBApp = () => {
     return saved;
   };
 
+  // ============ PK PARAMETERS ============
+  // Pharmacokinetic parameters based on ester, method, oil, site, volume
+  const getPkParameters = (compoundId, method, oilType, site, volumeMl) => {
+    // Base parameters by ester
+    const esterParams = {
+      'test_p': { 
+        halfLife: { min: 0.8, base: 1.0, max: 1.2 },
+        tmax: { min: 0.5, base: 0.75, max: 1.0 }
+      },
+      'test_e': { 
+        halfLife: { min: 4.0, base: 4.5, max: 5.0 },
+        tmax: { min: 1.0, base: 1.5, max: 2.0 }
+      },
+      'test_c': { 
+        halfLife: { min: 5.0, base: 5.5, max: 6.0 },
+        tmax: { min: 1.5, base: 2.0, max: 2.5 }
+      },
+      'hcg': { 
+        halfLife: { min: 1.0, base: 1.5, max: 2.0 },
+        tmax: { min: 0.5, base: 1.0, max: 1.5 }
+      },
+    };
+
+    // Method modifiers (affects absorption rate)
+    const methodModifier = {
+      'im': { absorption: 1.0, bioavailability: 0.70 },
+      'subq': { absorption: 1.12, bioavailability: 0.82 },
+    };
+
+    // Oil type modifiers
+    const oilModifier = {
+      'mct': 0.95,        // 5% faster
+      'grape_seed': 1.0,  // baseline
+      'sesame': 1.05,     // 5% slower
+      'castor': 1.10,     // 10% slower
+      'other': 1.0,
+      'unknown': 1.0,
+    };
+
+    // Site modifiers
+    const siteModifier = {
+      'glute': 1.08,      // larger muscle, slower
+      'delt': 1.0,        // baseline
+      'quad': 1.02,       // slightly slower
+      'abdomen': 1.12,    // SubQ typical site, slower
+    };
+
+    // Volume modifier
+    const getVolumeModifier = (ml) => {
+      if (ml < 0.3) return 0.95;   // faster absorption
+      if (ml > 0.5) return 1.08;   // slower absorption
+      return 1.0;
+    };
+
+    // Determine ester from compound ID
+    let esterKey = 'test_e'; // default
+    if (compoundId.includes('test_p') || compoundId.includes('prop')) esterKey = 'test_p';
+    else if (compoundId.includes('test_c') || compoundId.includes('cyp')) esterKey = 'test_c';
+    else if (compoundId.includes('test_e') || compoundId.includes('enan')) esterKey = 'test_e';
+    else if (compoundId.includes('hcg')) esterKey = 'hcg';
+
+    const ester = esterParams[esterKey] || esterParams['test_e'];
+    const methodMod = methodModifier[method] || methodModifier['im'];
+    const oilMod = oilModifier[oilType] || 1.0;
+    const siteMod = siteModifier[site] || 1.0;
+    const volMod = getVolumeModifier(volumeMl);
+
+    // Calculate adjusted parameters
+    const totalAbsorptionMod = methodMod.absorption * oilMod * siteMod * volMod;
+    
+    return {
+      halfLife: {
+        min: ester.halfLife.min * totalAbsorptionMod,
+        base: ester.halfLife.base * totalAbsorptionMod,
+        max: ester.halfLife.max * totalAbsorptionMod,
+      },
+      tmax: {
+        min: ester.tmax.min * totalAbsorptionMod,
+        base: ester.tmax.base * totalAbsorptionMod,
+        max: ester.tmax.max * totalAbsorptionMod,
+      },
+      bioavailability: methodMod.bioavailability,
+      modifiers: {
+        method: method === 'subq' ? 'SubQ' : 'IM',
+        oil: oilType !== 'unknown' ? oilType.toUpperCase().replace('_', ' ') : null,
+        site: site,
+      }
+    };
+  };
+
+  // Generate PK curve data with optional band (min/max)
+  const generatePkData = (pkParams, dose, frequency, days = 42, withBand = false) => {
+    const calculate = (halfLife, tmax, bio) => {
+      const ka = Math.log(2) / (tmax / 3);
+      const ke = Math.log(2) / halfLife;
+      const data = [];
+      const pointsPerDay = 12; // 12 points per day = every 2 hours
+      
+      const injectionInterval = frequency === 'ED' ? 1 : 
+                                frequency === 'EOD' ? 2 : 
+                                frequency === '3xW' ? 7/3 : 3.5;
+      
+      for (let i = 0; i <= days * pointsPerDay; i++) {
+        const t = i / pointsPerDay;
+        let concentration = 0;
+        
+        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
+          const injDay = injNum * injectionInterval;
+          const timeSinceInj = t - injDay;
+          if (timeSinceInj >= 0 && timeSinceInj < 30) {
+            const d = dose * bio;
+            const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
+            concentration += Math.max(0, c);
+          }
+        }
+        
+        data.push({ day: t, concentration });
+      }
+      return data;
+    };
+
+    const baseData = calculate(pkParams.halfLife.base, pkParams.tmax.base, pkParams.bioavailability);
+    
+    // Find peak in steady state (days 28-42) for normalization
+    const steadyStateData = baseData.filter(d => d.day >= 28);
+    const peakConc = Math.max(...steadyStateData.map(d => d.concentration));
+    
+    // Normalize to 0-100% (no rounding for smooth curve)
+    const normalizedData = baseData.map(d => ({
+      day: d.day,
+      percent: peakConc > 0 ? (d.concentration / peakConc) * 100 : 0,
+    }));
+
+    if (withBand) {
+      const minData = calculate(pkParams.halfLife.min, pkParams.tmax.min, pkParams.bioavailability);
+      const maxData = calculate(pkParams.halfLife.max, pkParams.tmax.max, pkParams.bioavailability);
+      
+      // Find peaks for each
+      const minPeak = Math.max(...minData.filter(d => d.day >= 28).map(d => d.concentration));
+      const maxPeak = Math.max(...maxData.filter(d => d.day >= 28).map(d => d.concentration));
+      
+      return normalizedData.map((d, i) => ({
+        ...d,
+        percentMin: minPeak > 0 ? (minData[i].concentration / minPeak) * 100 : 0,
+        percentMax: maxPeak > 0 ? (maxData[i].concentration / maxPeak) * 100 : 0,
+      }));
+    }
+
+    return normalizedData;
+  };
+
+  // Calculate stability with range
+  const calculateStabilityWithRange = (pkParams, dose, frequency) => {
+    const calculateForParams = (halfLife, tmax, bio) => {
+      const ka = Math.log(2) / (tmax / 3);
+      const ke = Math.log(2) / halfLife;
+      const injectionInterval = frequency === 'ED' ? 1 : 
+                                frequency === 'EOD' ? 2 : 
+                                frequency === '3xW' ? 7/3 : 3.5;
+      
+      const concentrations = [];
+      const pointsPerDay = 24; // More points for accurate peak/trough detection
+      for (let i = 28 * pointsPerDay; i <= 42 * pointsPerDay; i++) {
+        const t = i / pointsPerDay;
+        let concentration = 0;
+        
+        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
+          const injDay = injNum * injectionInterval;
+          const timeSinceInj = t - injDay;
+          if (timeSinceInj >= 0 && timeSinceInj < 30) {
+            const d = dose * bio;
+            const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
+            concentration += Math.max(0, c);
+          }
+        }
+        concentrations.push(concentration);
+      }
+      
+      const peak = Math.max(...concentrations);
+      const trough = Math.min(...concentrations);
+      const fluctuation = peak > 0 ? ((peak - trough) / peak) * 100 : 0;
+      return { stability: Math.round(100 - fluctuation), fluctuation: Math.round(fluctuation), troughPercent: Math.round((trough / peak) * 100) };
+    };
+
+    const base = calculateForParams(pkParams.halfLife.base, pkParams.tmax.base, pkParams.bioavailability);
+    const min = calculateForParams(pkParams.halfLife.min, pkParams.tmax.min, pkParams.bioavailability);
+    const max = calculateForParams(pkParams.halfLife.max, pkParams.tmax.max, pkParams.bioavailability);
+
+    return {
+      stability: { min: Math.min(min.stability, max.stability), base: base.stability, max: Math.max(min.stability, max.stability) },
+      fluctuation: { min: Math.min(min.fluctuation, max.fluctuation), base: base.fluctuation, max: Math.max(min.fluctuation, max.fluctuation) },
+      troughPercent: { min: Math.min(min.troughPercent, max.troughPercent), base: base.troughPercent, max: Math.max(min.troughPercent, max.troughPercent) },
+    };
+  };
+
   // ============ STATE ============
   const [currentStep, setCurrentStep] = useState(() => {
     const saved = migrateProfile(loadFromStorage('thub-profile', null));
@@ -122,6 +317,15 @@ const THUBApp = () => {
   });
   const [activeTab, setActiveTab] = useState('today');
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [ticker, setTicker] = useState(0); // For auto-refresh "NOW" status
+
+  // Auto-refresh every minute for live "NOW" status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTicker(prev => prev + 1);
+    }, 60 * 1000); // Every 60 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   // Modal state за потвърждение на промени
   const [showChangeModal, setShowChangeModal] = useState(false);
@@ -685,45 +889,20 @@ const THUBApp = () => {
     const maxUnits = protocolData.graduation === 1 ? 50 : 100;
     const displayUnits = Math.min(unitsRounded, maxUnits);
 
-    // Calculate stability index
-    const calculateStability = () => {
-      const halfLife = compound.id.includes('prop') ? 1.5 : 4.5;
-      const tmax = compound.id.includes('prop') ? 0.5 : 1.5;
-      const bioavailability = 0.70;
-      const ka = Math.log(2) / (tmax / 3);
-      const ke = Math.log(2) / halfLife;
-      
-      const injectionInterval = protocolData.frequency === 'ED' ? 1 : 
-                                protocolData.frequency === 'EOD' ? 2 : 
-                                protocolData.frequency === '3xW' ? 7/3 : 3.5;
-      
-      // Calculate concentrations for days 28-42 (steady state)
-      const concentrations = [];
-      for (let i = 28 * 8; i <= 42 * 8; i++) {
-        const t = i / 8;
-        let concentration = 0;
-        
-        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
-          const injDay = injNum * injectionInterval;
-          const timeSinceInj = t - injDay;
-          if (timeSinceInj >= 0 && timeSinceInj < 30) {
-            const dose = actualDose * bioavailability;
-            const c = dose * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
-            concentration += Math.max(0, c);
-          }
-        }
-        concentrations.push(concentration);
-      }
-      
-      const peak = Math.max(...concentrations);
-      const trough = Math.min(...concentrations);
-      const fluctuation = peak > 0 ? ((peak - trough) / peak) * 100 : 0;
-      const stability = Math.round(100 - fluctuation);
-      
-      return { stability, peak, trough, fluctuation: Math.round(fluctuation) };
-    };
+    // Get PK parameters based on all protocol factors
+    const pkParams = getPkParameters(
+      protocolData.compound,
+      protocolData.injectionMethod,
+      protocolData.oilType,
+      protocolData.injectionLocation,
+      actualMl
+    );
 
-    const stabilityData = calculateStability();
+    // Calculate stability with range
+    const stabilityData = calculateStabilityWithRange(pkParams, actualDose, protocolData.frequency);
+
+    // Generate PK data for graph with band
+    const pkData = generatePkData(pkParams, actualDose, protocolData.frequency, 42, true);
 
     return (
       <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }}>
@@ -1048,61 +1227,28 @@ const THUBApp = () => {
             </div>
           </div>
 
-          {/* PK Graph - Concentration over time */}
+          {/* PK Graph - Normalized concentration (0-100%) with band */}
           <div 
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-4 text-center">
-              Прогнозна концентрация (6 седмици)
+              Относителна концентрация (6 седмици)
             </label>
             
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={(() => {
-                    // Generate PK data using Bateman equation
-                    const halfLife = compound.id.includes('prop') ? 1.5 : 4.5;
-                    const tmax = compound.id.includes('prop') ? 0.5 : 1.5;
-                    const bioavailability = 0.70;
-                    const ka = Math.log(2) / (tmax / 3);
-                    const ke = Math.log(2) / halfLife;
-                    
-                    const days = 42;
-                    const pointsPerDay = 8; // More points for smoother curve
-                    const data = [];
-                    
-                    const injectionInterval = protocolData.frequency === 'ED' ? 1 : 
-                                              protocolData.frequency === 'EOD' ? 2 : 
-                                              protocolData.frequency === '3xW' ? 7/3 : 3.5;
-                    
-                    for (let i = 0; i <= days * pointsPerDay; i++) {
-                      const t = i / pointsPerDay;
-                      let concentration = 0;
-                      
-                      // Sum contribution from all previous injections
-                      for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
-                        const injDay = injNum * injectionInterval;
-                        const timeSinceInj = t - injDay;
-                        if (timeSinceInj >= 0 && timeSinceInj < 30) { // Only consider last 30 days of injections
-                          const dose = actualDose * bioavailability;
-                          const c = dose * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
-                          concentration += Math.max(0, c);
-                        }
-                      }
-                      
-                      // Add every 2nd point for better resolution
-                      if (i % 2 === 0) {
-                        data.push({ day: Math.round(t * 10) / 10, concentration: Math.round(concentration * 10) / 10 });
-                      }
-                    }
-                    return data;
-                  })()}
-                  margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                  data={pkData}
+                  margin={{ top: 5, right: 5, left: -15, bottom: 5 }}
                 >
                   <defs>
                     <linearGradient id="pkGradientProtocol" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="pkBandGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15}/>
                       <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
@@ -1118,19 +1264,32 @@ const THUBApp = () => {
                     tick={{ fill: '#64748b', fontSize: 10 }}
                     axisLine={{ stroke: '#334155' }}
                     tickLine={{ stroke: '#334155' }}
-                    tickFormatter={(v) => Math.round(v)}
-                    domain={['dataMin - 5', 'dataMax + 5']}
+                    tickFormatter={(v) => `${v}%`}
+                    domain={[0, 110]}
+                    ticks={[0, 25, 50, 75, 100]}
                   />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '8px' }}
                     labelStyle={{ color: '#94a3b8' }}
                     itemStyle={{ color: '#22d3ee' }}
-                    formatter={(value) => [`${value} ${compound.unit}`, 'Концентрация']}
-                    labelFormatter={(label) => `Ден ${label}`}
+                    formatter={(value, name) => {
+                      if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
+                      return [null, null]; // Hide other series
+                    }}
+                    labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
                   />
+                  {/* Band area (min-max range) - hidden from legend/tooltip */}
                   <Area 
-                    type="monotone" 
-                    dataKey="concentration" 
+                    type="natural" 
+                    dataKey="percentMax"
+                    stroke="none"
+                    fill="url(#pkBandGradient)"
+                    legendType="none"
+                  />
+                  {/* Main line */}
+                  <Area 
+                    type="natural" 
+                    dataKey="percent" 
                     stroke="#06b6d4" 
                     strokeWidth={2}
                     fill="url(#pkGradientProtocol)" 
@@ -1140,7 +1299,7 @@ const THUBApp = () => {
             </div>
             
             <div style={{ color: '#475569' }} className="text-xs text-center mt-2">
-              t½ = {compound.id.includes('prop') ? '1.5' : '4.5'} дни • {freq.name}
+              t½ ~{pkParams.halfLife.min.toFixed(1)}-{pkParams.halfLife.max.toFixed(1)}д │ {pkParams.modifiers.method}{pkParams.modifiers.oil ? ` │ ${pkParams.modifiers.oil}` : ''} │ Trough: ~{stabilityData.troughPercent.min}-{stabilityData.troughPercent.max}%
             </div>
           </div>
 
@@ -1168,22 +1327,22 @@ const THUBApp = () => {
                     cy="50"
                     r="40"
                     fill="none"
-                    stroke={stabilityData.stability >= 70 ? '#10b981' : stabilityData.stability >= 50 ? '#f59e0b' : '#ef4444'}
+                    stroke={stabilityData.stability.base >= 70 ? '#10b981' : stabilityData.stability.base >= 50 ? '#f59e0b' : '#ef4444'}
                     strokeWidth="12"
                     strokeLinecap="round"
-                    strokeDasharray={`${stabilityData.stability * 2.51} 251`}
+                    strokeDasharray={`${stabilityData.stability.base * 2.51} 251`}
                     style={{
-                      filter: `drop-shadow(0 0 8px ${stabilityData.stability >= 70 ? 'rgba(16, 185, 129, 0.5)' : stabilityData.stability >= 50 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(239, 68, 68, 0.5)'})`
+                      filter: `drop-shadow(0 0 8px ${stabilityData.stability.base >= 70 ? 'rgba(16, 185, 129, 0.5)' : stabilityData.stability.base >= 50 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(239, 68, 68, 0.5)'})`
                     }}
                   />
                 </svg>
                 {/* Center text */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span 
-                    className="text-3xl font-bold"
-                    style={{ color: stabilityData.stability >= 70 ? '#10b981' : stabilityData.stability >= 50 ? '#f59e0b' : '#ef4444' }}
+                    className="text-2xl font-bold"
+                    style={{ color: stabilityData.stability.base >= 70 ? '#10b981' : stabilityData.stability.base >= 50 ? '#f59e0b' : '#ef4444' }}
                   >
-                    {stabilityData.stability}%
+                    ~{stabilityData.stability.min}-{stabilityData.stability.max}%
                   </span>
                 </div>
               </div>
@@ -1197,10 +1356,10 @@ const THUBApp = () => {
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between">
                     <span style={{ color: '#64748b' }}>Флуктуация:</span>
-                    <span style={{ color: '#94a3b8' }}>~{stabilityData.fluctuation}%</span>
+                    <span style={{ color: '#94a3b8' }}>~{stabilityData.fluctuation.min}-{stabilityData.fluctuation.max}%</span>
                   </div>
                   <div style={{ color: '#475569' }} className="text-xs mt-2">
-                    Базирано на t½ = {compound.id.includes('prop') ? '1.5' : '4.5'} дни
+                    Базирано на средни фармакокинетични данни
                   </div>
                 </div>
               </div>
@@ -1345,6 +1504,104 @@ const THUBApp = () => {
   const deltaAbs = actualWeekly - proto.weeklyDose;
   const deltaPct = proto.weeklyDose > 0 ? deltaAbs / proto.weeklyDose : 0;
 
+  // Get PK parameters for main view
+  const pkParamsMain = getPkParameters(
+    proto.compound,
+    proto.injectionMethod,
+    proto.oilType,
+    proto.injectionLocation,
+    actualMl
+  );
+
+  // Calculate stability with range for main view
+  const stabilityDataMain = calculateStabilityWithRange(pkParamsMain, actualDose, proto.frequency);
+
+  // Generate PK data for graph with band
+  const pkDataMain = generatePkData(pkParamsMain, actualDose, proto.frequency, 42, true);
+
+  // Calculate "NOW" - REAL concentration based on logged injections
+  const calculateCurrentStatus = () => {
+    // Find all injections with time
+    const sortedInjections = Object.entries(injections)
+      .filter(([key, val]) => val && val.time)
+      .map(([key, val]) => {
+        const [year, month, day] = key.split('-').map(Number);
+        const [hours, minutes] = val.time.split(':').map(Number);
+        const date = new Date(year, month, day, hours, minutes);
+        return { key, date, ...val };
+      })
+      .sort((a, b) => a.date - b.date); // oldest first
+
+    if (sortedInjections.length === 0) return null;
+
+    const now = new Date();
+    const lastInjection = sortedInjections[sortedInjections.length - 1];
+    const hoursSinceLastInjection = (now - lastInjection.date) / (1000 * 60 * 60);
+
+    // PK parameters
+    const halfLife = pkParamsMain.halfLife.base;
+    const tmax = pkParamsMain.tmax.base;
+    const bio = pkParamsMain.bioavailability;
+    const ka = Math.log(2) / (tmax / 3);
+    const ke = Math.log(2) / halfLife;
+
+    // Calculate REAL current concentration from ALL logged injections
+    let currentConcentration = 0;
+    for (const inj of sortedInjections) {
+      const hoursSince = (now - inj.date) / (1000 * 60 * 60);
+      const daysSince = hoursSince / 24;
+      
+      if (daysSince >= 0 && daysSince < 30) {
+        const d = actualDose * bio;
+        const c = d * (ka / (ka - ke)) * (Math.exp(-ke * daysSince) - Math.exp(-ka * daysSince));
+        currentConcentration += Math.max(0, c);
+      }
+    }
+
+    // Calculate THEORETICAL steady state peak
+    const injectionInterval = proto.frequency === 'ED' ? 1 : 
+                              proto.frequency === 'EOD' ? 2 : 
+                              proto.frequency === '3xW' ? 7/3 : 3.5;
+    
+    let steadyStatePeak = 0;
+    for (let checkDay = 28; checkDay <= 42; checkDay += 0.1) {
+      let conc = 0;
+      for (let injNum = 0; injNum <= Math.floor(checkDay / injectionInterval); injNum++) {
+        const injDay = injNum * injectionInterval;
+        const timeSinceInj = checkDay - injDay;
+        if (timeSinceInj >= 0 && timeSinceInj < 30) {
+          const d = actualDose * bio;
+          const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
+          conc += Math.max(0, c);
+        }
+      }
+      if (conc > steadyStatePeak) steadyStatePeak = conc;
+    }
+
+    // Percentage of steady state
+    const currentPercent = steadyStatePeak > 0 ? 
+      Math.round((currentConcentration / steadyStatePeak) * 100) : 0;
+
+    // Days on protocol
+    const firstInjection = sortedInjections[0];
+    const daysOnProtocol = Math.round((now - firstInjection.date) / (1000 * 60 * 60 * 24));
+
+    // Hours to next peak
+    const hoursToNextPeak = Math.max(0, (tmax * 24) - hoursSinceLastInjection);
+
+    return {
+      lastInjection,
+      hoursSinceLastInjection: Math.round(hoursSinceLastInjection * 10) / 10,
+      currentPercent: Math.min(currentPercent, 105),
+      daysOnProtocol,
+      totalInjections: sortedInjections.length,
+      hoursToNextPeak: Math.round(hoursToNextPeak * 10) / 10,
+    };
+  };
+
+  // Auto-refresh: ticker changes every minute, triggering re-render and new Date()
+  const currentStatus = calculateCurrentStatus();
+
   // Rotation schedule (ОПГ)
   const injectionsPerPeriod = proto.frequency === 'EOD' ? 7 : freq.perWeek;
   const targetPerPeriod = proto.frequency === 'EOD' ? proto.weeklyDose * 2 : proto.weeklyDose;
@@ -1407,6 +1664,31 @@ const THUBApp = () => {
 
   const todayCompleted = !!injections[todayKey];
 
+  // Check for missed injections in the last 7 days
+  const hasMissedInjection = () => {
+    const startDate = new Date(proto.startDate);
+    startDate.setHours(0, 0, 0, 0);
+    
+    for (let i = 1; i <= 7; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      checkDate.setHours(0, 0, 0, 0);
+      
+      // Don't check before protocol start
+      if (checkDate < startDate) continue;
+      
+      if (isInjectionDay(checkDate)) {
+        const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+        if (!injections[dateKey]) {
+          return true; // Found a missed injection
+        }
+      }
+    }
+    return false;
+  };
+
+  const missedInjection = hasMissedInjection();
+
   const toggleTodayInjection = () => {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -1467,7 +1749,7 @@ const THUBApp = () => {
 
   const todayDose = getDoseForDate(today) || unitsRounded;
 
-  // Syringe component for main view
+  // Syringe component for main view - with logo inside
   const SyringeMain = ({ units }) => {
     const maxUnits = proto.graduation === 1 ? 50 : 100;
     const displayUnits = Math.min(units, maxUnits);
@@ -1478,11 +1760,16 @@ const THUBApp = () => {
     return (
       <div className="relative">
         <div 
-          style={{ backgroundColor: '#0f172a', borderColor: '#334155', width: '110px', height: '420px' }}
+          style={{ backgroundColor: '#0f172a', borderColor: '#334155', width: '110px', height: '450px' }}
           className="relative border-2 rounded-xl overflow-hidden"
         >
+          {/* Logo at top inside syringe */}
+          <div className="absolute top-0 left-0 right-0 z-10 py-3 text-center" style={{ backgroundColor: '#0f172a' }}>
+            <span className="text-white text-sm font-black tracking-wide">THUB</span>
+          </div>
+
           {ticks.map(tick => {
-            const pos = 4 + ((maxUnits - tick) / maxUnits) * 92;
+            const pos = 12 + ((maxUnits - tick) / maxUnits) * 84;
             const isMajor = tick % 10 === 0;
             const isMedium = tick % 5 === 0 && !isMajor;
 
@@ -1521,7 +1808,7 @@ const THUBApp = () => {
               background: todayCompleted 
                 ? 'linear-gradient(to top, #059669, #10b981, #34d399)' 
                 : 'linear-gradient(to top, #0891b2, #06b6d4, #22d3ee)',
-              height: `${4 + (displayUnits / maxUnits) * 92}%`,
+              height: `${4 + (displayUnits / maxUnits) * 84}%`,
               opacity: 0.5
             }}
             className="absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-b-lg"
@@ -1536,26 +1823,9 @@ const THUBApp = () => {
 
   return (
     <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }} className="pb-24">
-      
-      {/* Header */}
-      <header 
-        style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-        className="px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b"
-      >
-        <div 
-          style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
-          className="w-12 h-12 rounded-xl border-2 flex items-center justify-center"
-        >
-          <span className="text-white text-sm font-black">THUB</span>
-        </div>
-        <p className="text-white text-lg font-semibold">
-          <span style={{ color: '#64748b' }}>{dayNames[today.getDay()]}, </span>
-          {today.getDate()} {monthNames[today.getMonth()]}
-        </p>
-      </header>
 
       {/* Content */}
-      <main className="p-4">
+      <main className="p-4 pt-6">
         
         {/* TODAY TAB */}
         {activeTab === 'today' && (
@@ -1566,9 +1836,19 @@ const THUBApp = () => {
                 {/* Main Card - Syringe + Dose */}
                 <div 
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                  className="border rounded-2xl p-6"
+                  className="border rounded-2xl p-6 relative"
                 >
-                  <div className="flex items-center justify-center gap-8">
+                  {/* Date badge top right */}
+                  <div className="absolute top-3 right-3">
+                    <span 
+                      style={{ color: '#22d3ee', backgroundColor: '#0a1628', borderColor: '#0891b2' }} 
+                      className="text-sm font-semibold px-3 py-1 rounded-full border"
+                    >
+                      {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-8 mt-4">
                     <SyringeMain units={todayDose} />
                     
                     <div className="text-center">
@@ -1685,9 +1965,13 @@ const THUBApp = () => {
                     style={{ 
                       background: todayCompleted 
                         ? 'linear-gradient(90deg, #059669, #10b981)' 
-                        : 'linear-gradient(90deg, #06b6d4, #14b8a6)' 
+                        : missedInjection 
+                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                          : 'linear-gradient(90deg, #06b6d4, #14b8a6)' 
                     }}
-                    className="w-full mt-6 py-4 text-white font-semibold rounded-xl transition-all"
+                    className={`w-full mt-6 py-4 text-white font-semibold rounded-xl transition-all ${
+                      !todayCompleted && missedInjection ? 'animate-pulse' : ''
+                    }`}
                   >
                     {todayCompleted 
                       ? `✓ Направено ${injections[todayKey]?.time} ${
@@ -1696,12 +1980,14 @@ const THUBApp = () => {
                           injections[todayKey]?.location === 'quad' ? '🦵' : 
                           injections[todayKey]?.location === 'abdomen' ? '⭕' : ''
                         }${injections[todayKey]?.side === 'left' ? 'Л' : injections[todayKey]?.side === 'right' ? 'Д' : ''}`
-                      : '💉 Маркирай като направено'
+                      : missedInjection 
+                        ? '⚠️ Пропусната инжекция! Маркирай'
+                        : '💉 Маркирай като направено'
                     }
                   </button>
                 </div>
 
-                {/* Седмичен график */}
+                {/* Оптимизация на протокола */}
                 {(() => {
                   // EOD = 14 дни, останалите = 7 дни
                   const isEOD = proto.frequency === 'EOD';
@@ -1755,7 +2041,7 @@ const THUBApp = () => {
                       className="border rounded-2xl p-4"
                     >
                       <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">
-                        {isEOD ? 'График (14 дни)' : 'Седмичен график'}
+                        Оптимизация на протокола {isEOD ? '(14 дни)' : ''}
                       </p>
                       
                       <div className="overflow-x-auto pt-2 pb-2">
@@ -1833,58 +2119,58 @@ const THUBApp = () => {
                   </div>
                 )}
 
-                {/* PK Graph - Concentration over time */}
+                {/* PK Graph - Normalized concentration (0-100%) with band */}
                 <div 
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                   className="border rounded-2xl p-4"
                 >
                   <p style={{ color: '#64748b' }} className="text-sm font-medium mb-3 text-center">
-                    Концентрация (6 седмици)
+                    Относителна концентрация (6 седмици)
                   </p>
+                  
+                  {/* Current status indicator */}
+                  {currentStatus && (
+                    <div className="mb-3 p-2 rounded-lg" style={{ backgroundColor: '#1e293b' }}>
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                        <span style={{ color: '#fbbf24' }} className="text-sm font-medium">
+                          Сега: ~{currentStatus.currentPercent}% от steady state
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-center gap-3 mt-1 text-xs" style={{ color: '#64748b' }}>
+                        <span>{currentStatus.hoursSinceLastInjection}ч след инж.</span>
+                        <span>•</span>
+                        <span>Ден {currentStatus.daysOnProtocol}</span>
+                        <span>•</span>
+                        <span>{currentStatus.totalInjections} инж. логнати</span>
+                        {currentStatus.hoursToNextPeak > 0 && currentStatus.hoursSinceLastInjection < 48 && (
+                          <>
+                            <span>•</span>
+                            <span>Пик ~{currentStatus.hoursToNextPeak}ч</span>
+                          </>
+                        )}
+                      </div>
+                      {currentStatus.daysOnProtocol < 28 && (
+                        <p className="text-xs text-center mt-1" style={{ color: '#f59e0b' }}>
+                          ⚠️ Steady state след ~{28 - currentStatus.daysOnProtocol} дни
+                        </p>
+                      )}
+                    </div>
+                  )}
                   
                   <div className="h-40">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart 
-                        data={(() => {
-                          const halfLife = compound.id.includes('prop') ? 1.5 : 4.5;
-                          const tmax = compound.id.includes('prop') ? 0.5 : 1.5;
-                          const bioavailability = 0.70;
-                          const ka = Math.log(2) / (tmax / 3);
-                          const ke = Math.log(2) / halfLife;
-                          
-                          const days = 42;
-                          const pointsPerDay = 8;
-                          const data = [];
-                          
-                          const injectionInterval = proto.frequency === 'ED' ? 1 : 
-                                                    proto.frequency === 'EOD' ? 2 : 
-                                                    proto.frequency === '3xW' ? 7/3 : 3.5;
-                          
-                          for (let i = 0; i <= days * pointsPerDay; i++) {
-                            const t = i / pointsPerDay;
-                            let concentration = 0;
-                            
-                            for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
-                              const injDay = injNum * injectionInterval;
-                              const timeSinceInj = t - injDay;
-                              if (timeSinceInj >= 0 && timeSinceInj < 30) {
-                                const dose = actualDose * bioavailability;
-                                const c = dose * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
-                                concentration += Math.max(0, c);
-                              }
-                            }
-                            
-                            if (i % 2 === 0) {
-                              data.push({ day: Math.round(t * 10) / 10, concentration: Math.round(concentration * 10) / 10 });
-                            }
-                          }
-                          return data;
-                        })()}
-                        margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                        data={pkDataMain}
+                        margin={{ top: 5, right: 5, left: -15, bottom: 5 }}
                       >
                         <defs>
                           <linearGradient id="pkGradientToday" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/>
+                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="pkBandGradientToday" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15}/>
                             <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
@@ -1900,19 +2186,32 @@ const THUBApp = () => {
                           tick={{ fill: '#64748b', fontSize: 10 }}
                           axisLine={{ stroke: '#334155' }}
                           tickLine={{ stroke: '#334155' }}
-                          tickFormatter={(v) => Math.round(v)}
-                          domain={['dataMin - 5', 'dataMax + 5']}
+                          tickFormatter={(v) => `${v}%`}
+                          domain={[0, 110]}
+                          ticks={[0, 25, 50, 75, 100]}
                         />
                         <Tooltip 
                           contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '8px' }}
                           labelStyle={{ color: '#94a3b8' }}
                           itemStyle={{ color: '#22d3ee' }}
-                          formatter={(value) => [`${value} ${compound.unit}`, 'Конц.']}
-                          labelFormatter={(label) => `Ден ${label}`}
+                          formatter={(value, name) => {
+                            if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
+                            return [null, null]; // Hide other series
+                          }}
+                          labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
                         />
+                        {/* Band area (min-max range) - hidden from legend/tooltip */}
                         <Area 
-                          type="monotone" 
-                          dataKey="concentration" 
+                          type="natural" 
+                          dataKey="percentMax"
+                          stroke="none"
+                          fill="url(#pkBandGradientToday)"
+                          legendType="none"
+                        />
+                        {/* Main line */}
+                        <Area 
+                          type="natural" 
+                          dataKey="percent" 
                           stroke="#06b6d4" 
                           strokeWidth={2}
                           fill="url(#pkGradientToday)" 
@@ -1922,7 +2221,7 @@ const THUBApp = () => {
                   </div>
                   
                   <p style={{ color: '#475569' }} className="text-xs text-center mt-2">
-                    t½ = {compound.id.includes('prop') ? '1.5' : '4.5'} дни • {freq.shortName} • {proto.weeklyDose} {compound.unit}/сед
+                    t½ ~{pkParamsMain.halfLife.min.toFixed(1)}-{pkParamsMain.halfLife.max.toFixed(1)}д │ {pkParamsMain.modifiers.method}{pkParamsMain.modifiers.oil ? ` │ ${pkParamsMain.modifiers.oil}` : ''} │ Trough: ~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%
                   </p>
                 </div>
               </>
