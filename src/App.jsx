@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
-
-coimport { useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import { supabase } from './supabaseClient';
 
 const THUBApp = () => {
   // ============ STORAGE (localStorage for local/production) ============
@@ -238,6 +236,10 @@ const THUBApp = () => {
   };
 
   // ============ STATE ============
+  // ============ AUTH/SESSION STATE ============
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const [currentStep, setCurrentStep] = useState(() => {
     const saved = migrateProfile(loadFromStorage('thub-profile', null));
     if (!saved || !saved.name) return 'onboarding';
@@ -351,6 +353,21 @@ const THUBApp = () => {
   useEffect(() => {
     saveToStorage('thub-injections', injections);
   }, [injections]);
+
+
+  // ============ SUPABASE AUTH ============
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ============ PROTOCOL CHANGE DETECTION ============
   const compoundNames = {
@@ -474,6 +491,14 @@ const THUBApp = () => {
   };
 
   // Reset function
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setProfile(null);
+    setInjections({});
+    setCurrentStep('onboarding');
+  };
+
   const resetApp = () => {
     try {
       localStorage.removeItem('thub-profile');
@@ -526,71 +551,80 @@ const THUBApp = () => {
   };
 
   // ============ ACTIONS ============
-  const handleOnboardingSubmit = () => {
+
+  const handleOnboardingSubmit = async () => {
     if (authMode === 'signup') {
-      // SIGN UP - create new profile
+      // SIGN UP with Supabase
       if (validateOnboarding()) {
-        const newProfile = {
-          ...profile,
-          name: formData.name.trim(),
+        setAuthLoading(true);
+        
+        const { data, error } = await supabase.auth.signUp({
           email: formData.email.trim(),
           password: formData.password,
-          rememberMe: true,
-          createdAt: new Date().toISOString()
-        };
-        setProfile(newProfile);
-        saveToStorage('thub-profile', newProfile);
-        setCurrentStep('protocol');
-      }
-    } else {
-      // SIGN IN - validate and enter
-      if (validateOnboarding()) {
-        // Зареждаме от storage за да сме сигурни че имаме актуални данни
-        const savedProfile = loadFromStorage('thub-profile', null);
+        });
         
-        // Проверяваме дали email-ът match-ва
-        if (savedProfile && savedProfile.email && savedProfile.email.toLowerCase() !== formData.email.toLowerCase()) {
-          // Email не match-ва - изчистваме старите данни и започваме от нулата
-          console.log('Email mismatch - clearing old data');
-          localStorage.removeItem('thub-profile');
-          localStorage.removeItem('thub-injections');
-          localStorage.removeItem('thub-protocol');
-          
-          // Създаваме нов профил
-          const newProfile = {
-            name: '',
-            email: formData.email.trim(),
-            password: formData.password,
-            rememberMe: formData.rememberMe || false,
-            protocolConfigured: false,
-            createdAt: new Date().toISOString()
-          };
-          setProfile(newProfile);
-          saveToStorage('thub-profile', newProfile);
-          setInjections({});
-          setCurrentStep('protocol'); // Отиваме да настрои протокола
+        if (error) {
+          setErrors({ general: error.message });
+          setAuthLoading(false);
           return;
         }
         
-        const updatedProfile = {
-          ...savedProfile,
-          rememberMe: formData.rememberMe || false,
-          password: formData.rememberMe ? formData.password : ''
+        // Create profile in localStorage (for now)
+        const newProfile = {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          rememberMe: true,
+          protocolConfigured: false,
+          createdAt: new Date().toISOString()
         };
-        setProfile(updatedProfile);
-        saveToStorage('thub-profile', updatedProfile);
+        setProfile(newProfile);
+        saveToStorage('thub-profile-' + formData.email, newProfile);
+        setCurrentStep('protocol');
+        setAuthLoading(false);
+      }
+    } else {
+      // SIGN IN with Supabase
+      if (validateOnboarding()) {
+        setAuthLoading(true);
         
-        // Проверяваме saved данните, не state-а
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email.trim(),
+          password: formData.password,
+        });
+        
+        if (error) {
+          setErrors({ general: 'Грешен имейл или парола' });
+          setAuthLoading(false);
+          return;
+        }
+        
+        // Load profile from localStorage
+        const savedProfile = loadFromStorage('thub-profile-' + formData.email, null);
+        
         if (savedProfile && savedProfile.protocolConfigured && savedProfile.protocol) {
-          setProtocolData(savedProfile.protocol); // Зареждаме запазения протокол
-          setActiveTab('today'); // Отиваме в "Днес" таб
+          setProfile(savedProfile);
+          setProtocolData(savedProfile.protocol);
+          setActiveTab('today');
           setCurrentStep('main');
         } else {
+          // First time or no protocol - set up
+          const newProfile = {
+            name: savedProfile?.name || '',
+            email: formData.email.trim(),
+            rememberMe: formData.rememberMe || false,
+            protocolConfigured: false,
+            createdAt: savedProfile?.createdAt || new Date().toISOString()
+          };
+          setProfile(newProfile);
+          saveToStorage('thub-profile-' + formData.email, newProfile);
           setCurrentStep('protocol');
         }
+        
+        setAuthLoading(false);
       }
     }
   };
+
 
   const handleProtocolSubmit = () => {
     // Ако вече има запазен протокол, проверяваме за промени
@@ -1502,6 +1536,25 @@ const THUBApp = () => {
         )}
       </div>
     );
+  }
+
+
+  // ============ AUTH LOADING ============
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0a1628' }}>
+        <div className="text-center">
+          <div className="text-4xl font-bold mb-4" style={{ color: '#22d3ee' }}>THUB</div>
+          <p style={{ color: '#64748b' }}>Зареждане...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ NOT LOGGED IN ============
+  if (!session) {
+    // Show onboarding with login
+    // The existing onboarding flow will handle this
   }
 
   // ============ MAIN APP ============
@@ -2901,7 +2954,7 @@ const THUBApp = () => {
             </button>
 
             <button
-              onClick={() => setCurrentStep('onboarding')}
+              onClick={handleSignOut}
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="w-full border rounded-2xl p-4 text-left flex items-center justify-between"
             >
