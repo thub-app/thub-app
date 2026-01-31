@@ -666,15 +666,6 @@ const THUBApp = () => {
           >
             Научи повече за THUB →
           </button>
-
-          {/* Demo Button for Testing */}
-          <button
-            onClick={loadDemo}
-            style={{ backgroundColor: '#1e3a5f', color: '#22d3ee' }}
-            className="w-full py-3 rounded-xl font-medium hover:bg-cyan-900/50 transition-colors mt-3"
-          >
-            🚀 Demo режим (бърз тест)
-          </button>
         </div>
 
         {/* Right Panel - Auth Form */}
