@@ -343,6 +343,15 @@ const THUBApp = () => {
   const [detectedChanges, setDetectedChanges] = useState([]);
   const [changeReason, setChangeReason] = useState('');
 
+  // Log injection modal state
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [pendingLogDay, setPendingLogDay] = useState(null);
+  const [logTime, setLogTime] = useState('12:00');
+  const [logLocation, setLogLocation] = useState('delt');
+  const [logSide, setLogSide] = useState('left');
+  const [logDose, setLogDose] = useState(0);
+  const [logNote, setLogNote] = useState('');
+
   // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
@@ -1711,17 +1720,51 @@ const THUBApp = () => {
 
   const missedInjection = hasMissedInjection();
 
-  const toggleTodayInjection = () => {
+  // Open log modal with defaults
+  const openLogModal = (dayKey, dayDose, isToday = false) => {
     const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const defaultTime = isToday 
+      ? `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
+      : '12:00';
     
-    setInjections(prev => {
-      if (prev[todayKey]) {
-        const newState = { ...prev };
-        delete newState[todayKey];
-        return newState;
+    setPendingLogDay(dayKey);
+    setLogTime(defaultTime);
+    setLogLocation(selectedLocation);
+    setLogSide(selectedSide);
+    setLogDose(dayDose);
+    setLogNote('');
+    setShowLogModal(true);
+  };
+
+  // Save injection from modal
+  const saveLoggedInjection = () => {
+    if (!pendingLogDay) return;
+    
+    setInjections(prev => ({
+      ...prev,
+      [pendingLogDay]: {
+        time: logTime,
+        dose: logDose,
+        location: logLocation,
+        side: logSide,
+        note: logNote || undefined
       }
-      return { ...prev, [todayKey]: { time: timeStr, dose: unitsRounded, location: selectedLocation, side: selectedSide } };
+    }));
+    
+    // Update selected location/side for next time
+    setSelectedLocation(logLocation);
+    setSelectedSide(logSide);
+    
+    setShowLogModal(false);
+    setPendingLogDay(null);
+  };
+
+  // Remove logged injection
+  const removeLoggedInjection = (dayKey) => {
+    setInjections(prev => {
+      const newState = { ...prev };
+      delete newState[dayKey];
+      return newState;
     });
   };
 
@@ -1981,9 +2024,140 @@ const THUBApp = () => {
                     </div>
                   )}
 
+                  {/* Log Injection Modal */}
+                  {showLogModal && (
+                    <div 
+                      style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
+                      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    >
+                      <div 
+                        style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                        className="w-full max-w-sm border rounded-2xl p-6 shadow-2xl"
+                      >
+                        <h3 className="text-white text-xl font-bold text-center mb-6">💉 Логване на инжекция</h3>
+
+                        {/* Time Picker */}
+                        <div className="mb-4">
+                          <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Час на инжекция</label>
+                          <input
+                            type="time"
+                            value={logTime}
+                            onChange={(e) => setLogTime(e.target.value)}
+                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+                            className="w-full p-3 border rounded-xl text-center text-lg"
+                          />
+                        </div>
+
+                        {/* Location */}
+                        <div className="mb-4">
+                          <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Локация</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { id: 'delt', label: '💪 Делтоид' },
+                              { id: 'quad', label: '🦵 Бедро' },
+                              { id: 'glute', label: '🍑 Глутеус' },
+                              { id: 'abdomen', label: '⭕ Корем' }
+                            ].map(loc => (
+                              <button
+                                key={loc.id}
+                                onClick={() => setLogLocation(loc.id)}
+                                style={{ 
+                                  backgroundColor: logLocation === loc.id ? '#0891b2' : '#0a1628',
+                                  borderColor: logLocation === loc.id ? '#0891b2' : '#1e3a5f'
+                                }}
+                                className="py-2 border rounded-xl text-white text-sm"
+                              >
+                                {loc.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Side */}
+                        <div className="mb-4">
+                          <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Страна</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => setLogSide('left')}
+                              style={{ 
+                                backgroundColor: logSide === 'left' ? '#0891b2' : '#0a1628',
+                                borderColor: logSide === 'left' ? '#0891b2' : '#1e3a5f'
+                              }}
+                              className="py-3 border rounded-xl text-white font-medium"
+                            >
+                              Ляво
+                            </button>
+                            <button
+                              onClick={() => setLogSide('right')}
+                              style={{ 
+                                backgroundColor: logSide === 'right' ? '#0891b2' : '#0a1628',
+                                borderColor: logSide === 'right' ? '#0891b2' : '#1e3a5f'
+                              }}
+                              className="py-3 border rounded-xl text-white font-medium"
+                            >
+                              Дясно
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Dose */}
+                        <div className="mb-4">
+                          <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Доза (единици)</label>
+                          <input
+                            type="number"
+                            value={logDose}
+                            onChange={(e) => setLogDose(Number(e.target.value))}
+                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+                            className="w-full p-3 border rounded-xl text-center text-lg"
+                          />
+                        </div>
+
+                        {/* Note */}
+                        <div className="mb-6">
+                          <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Бележка (опционално)</label>
+                          <input
+                            type="text"
+                            value={logNote}
+                            onChange={(e) => setLogNote(e.target.value)}
+                            placeholder="PIP, синина, сменен флакон..."
+                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+                            className="w-full p-3 border rounded-xl text-sm placeholder-slate-500"
+                          />
+                        </div>
+
+                        {/* Buttons */}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              setShowLogModal(false);
+                              setPendingLogDay(null);
+                            }}
+                            style={{ backgroundColor: '#1e293b', color: '#94a3b8' }}
+                            className="flex-1 py-3 rounded-xl font-medium"
+                          >
+                            Отказ
+                          </button>
+                          <button
+                            onClick={saveLoggedInjection}
+                            style={{ background: 'linear-gradient(90deg, #06b6d4, #14b8a6)' }}
+                            className="flex-1 py-3 rounded-xl text-white font-medium"
+                          >
+                            ✓ Запиши
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Action Button */}
                   <button
-                    onClick={toggleTodayInjection}
+                    onClick={() => {
+                      if (todayCompleted) {
+                        removeLoggedInjection(todayKey);
+                      } else {
+                        openLogModal(todayKey, unitsRounded, true);
+                      }
+                    }}
                     style={{ 
                       background: todayCompleted 
                         ? 'linear-gradient(90deg, #059669, #10b981)' 
@@ -2081,17 +2255,11 @@ const THUBApp = () => {
                                 key={i}
                                 onClick={() => {
                                   if (!canClick) return;
-                                  const timeStr = day.isToday 
-                                    ? `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')}`
-                                    : '12:00';
-                                  setInjections(prev => {
-                                    if (prev[day.dayKey]) {
-                                      const newState = { ...prev };
-                                      delete newState[day.dayKey];
-                                      return newState;
-                                    }
-                                    return { ...prev, [day.dayKey]: { time: timeStr, dose: day.dose, location: selectedLocation, side: selectedSide } };
-                                  });
+                                  if (injections[day.dayKey]) {
+                                    removeLoggedInjection(day.dayKey);
+                                  } else {
+                                    openLogModal(day.dayKey, day.dose, day.isToday);
+                                  }
                                 }}
                                 disabled={!canClick}
                                 style={{ 
