@@ -257,7 +257,8 @@ const THUBApp = () => {
       source: saved.protocol.source || 'unknown',
       oilType: saved.protocol.oilType || 'unknown',
       injectionMethod: saved.protocol.injectionMethod || 'im',
-      injectionLocation: saved.protocol.injectionLocation || 'glute'
+      injectionLocation: saved.protocol.injectionLocation || 'glute',
+      showNowIndicator: saved.protocol.showNowIndicator !== false
     };
     return {
       compound: 'test_e_200',
@@ -268,7 +269,8 @@ const THUBApp = () => {
       source: 'unknown',
       oilType: 'unknown',
       injectionMethod: 'im',
-      injectionLocation: 'glute'
+      injectionLocation: 'glute',
+      showNowIndicator: true
     };
   });
 
@@ -1232,9 +1234,62 @@ const THUBApp = () => {
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="border rounded-2xl p-4"
           >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-4 text-center">
-              Относителна концентрация (6 седмици)
-            </label>
+            {/* NOW indicator with toggle */}
+            {proto.showNowIndicator !== false && currentStatus ? (
+              <div className="mb-3 p-2 rounded-lg relative" style={{ backgroundColor: '#1e293b' }}>
+                <button
+                  onClick={() => {
+                    const newProto = { ...proto, showNowIndicator: false };
+                    setProtocolData(newProto);
+                    const saved = loadFromStorage('thub-profile', {});
+                    saveToStorage('thub-profile', { ...saved, protocol: newProto });
+                  }}
+                  className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
+                  style={{ backgroundColor: '#064e3b', color: '#10b981' }}
+                >
+                  ON
+                </button>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                  <span style={{ color: '#fbbf24' }} className="text-sm font-medium">
+                    Сега: ~{currentStatus.currentPercent}% от steady state
+                  </span>
+                </div>
+                <div className="flex items-center justify-center gap-3 mt-1 text-xs" style={{ color: '#64748b' }}>
+                  <span>{currentStatus.hoursSinceLastInjection}ч след инж.</span>
+                  <span>•</span>
+                  <span>Ден {currentStatus.daysOnProtocol}</span>
+                  <span>•</span>
+                  <span>{currentStatus.totalInjections} инж. логнати</span>
+                </div>
+                {currentStatus.daysOnProtocol < 28 && (
+                  <p className="text-xs text-center mt-1" style={{ color: '#f59e0b' }}>
+                    ⚠️ Steady state след ~{28 - currentStatus.daysOnProtocol} дни
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="mb-3 p-2 rounded-lg relative" style={{ backgroundColor: '#1e293b' }}>
+                <button
+                  onClick={() => {
+                    const newProto = { ...proto, showNowIndicator: true };
+                    setProtocolData(newProto);
+                    const saved = loadFromStorage('thub-profile', {});
+                    saveToStorage('thub-profile', { ...saved, protocol: newProto });
+                  }}
+                  className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
+                  style={{ backgroundColor: '#1e293b', color: '#64748b', border: '1px solid #334155' }}
+                >
+                  OFF
+                </button>
+                <p style={{ color: '#64748b' }} className="text-sm text-center">
+                  Live статус изключен
+                </p>
+                <p style={{ color: '#475569' }} className="text-xs text-center mt-1">
+                  Включи ако логваш редовно
+                </p>
+              </div>
+            )}
             
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
@@ -2129,7 +2184,7 @@ const THUBApp = () => {
                   </p>
                   
                   {/* Current status indicator */}
-                  {currentStatus && (
+                  {proto.showNowIndicator !== false && currentStatus && (
                     <div className="mb-3 p-2 rounded-lg" style={{ backgroundColor: '#1e293b' }}>
                       <div className="flex items-center justify-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
