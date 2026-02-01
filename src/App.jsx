@@ -60,6 +60,10 @@ const THUBApp = () => {
         halfLife: { min: 1.0, base: 1.5, max: 2.0 },
         tmax: { min: 0.5, base: 1.0, max: 1.5 }
       },
+      'test_u': { 
+        halfLife: { min: 18.0, base: 21.0, max: 24.0 },
+        tmax: { min: 5.0, base: 7.0, max: 9.0 }
+      },
     };
 
     // Method modifiers (affects absorption rate)
@@ -97,6 +101,7 @@ const THUBApp = () => {
     let esterKey = 'test_e'; // default
     if (compoundId.includes('test_p') || compoundId.includes('prop')) esterKey = 'test_p';
     else if (compoundId.includes('test_c') || compoundId.includes('cyp')) esterKey = 'test_c';
+    else if (compoundId.includes('test_u') || compoundId.includes('undec')) esterKey = 'test_u';
     else if (compoundId.includes('test_e') || compoundId.includes('enan')) esterKey = 'test_e';
     else if (compoundId.includes('hcg')) esterKey = 'hcg';
 
@@ -139,7 +144,9 @@ const THUBApp = () => {
       
       const injectionInterval = frequency === 'ED' ? 1 : 
                                 frequency === 'EOD' ? 2 : 
-                                frequency === '3xW' ? 7/3 : 3.5;
+                                frequency === '3xW' ? 7/3 : 
+                                frequency === '1xW' ? 7 :
+                                frequency === '1x2W' ? 14 : 3.5;
       
       for (let i = 0; i <= days * pointsPerDay; i++) {
         const t = i / pointsPerDay;
@@ -148,7 +155,7 @@ const THUBApp = () => {
         for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
           const injDay = injNum * injectionInterval;
           const timeSinceInj = t - injDay;
-          if (timeSinceInj >= 0 && timeSinceInj < 30) {
+          if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
             const d = dose * bio;
             const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
             concentration += Math.max(0, c);
@@ -197,7 +204,9 @@ const THUBApp = () => {
       const ke = Math.log(2) / halfLife;
       const injectionInterval = frequency === 'ED' ? 1 : 
                                 frequency === 'EOD' ? 2 : 
-                                frequency === '3xW' ? 7/3 : 3.5;
+                                frequency === '3xW' ? 7/3 : 
+                                frequency === '1xW' ? 7 :
+                                frequency === '1x2W' ? 14 : 3.5;
       
       const concentrations = [];
       const pointsPerDay = 24; // More points for accurate peak/trough detection
@@ -208,7 +217,7 @@ const THUBApp = () => {
         for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
           const injDay = injNum * injectionInterval;
           const timeSinceInj = t - injDay;
-          if (timeSinceInj >= 0 && timeSinceInj < 30) {
+          if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
             const d = dose * bio;
             const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
             concentration += Math.max(0, c);
@@ -346,6 +355,7 @@ const THUBApp = () => {
     'test_e_250': 'Testosterone Enanthate 250mg/mL',
     'test_c_250': 'Testosterone Cypionate 250mg/mL',
     'test_p_100': 'Testosterone Propionate 100mg/mL',
+    'test_u_250': 'Testosterone Undecanoate 250mg/mL',
     'hcg': 'HCG 5000IU / 5mL',
   };
 
@@ -354,6 +364,8 @@ const THUBApp = () => {
     'EOD': 'През ден',
     '3xW': '3× седмично',
     '2xW': '2× седмично',
+    '1xW': '1× седмично',
+    '1x2W': '1× на 2 седмици',
   };
 
   const detectProtocolChanges = (oldProto, newProto) => {
@@ -865,6 +877,7 @@ const THUBApp = () => {
       { id: 'test_e_250', name: 'Testosterone Enanthate 250mg/mL', concentration: 250, unit: 'mg' },
       { id: 'test_c_250', name: 'Testosterone Cypionate 250mg/mL', concentration: 250, unit: 'mg' },
       { id: 'test_p_100', name: 'Testosterone Propionate 100mg/mL', concentration: 100, unit: 'mg' },
+      { id: 'test_u_250', name: 'Testosterone Undecanoate 250mg/mL', concentration: 250, unit: 'mg' },
       { id: 'hcg', name: 'HCG 5000IU / 5mL', concentration: 1000, unit: 'IU' },
     ];
 
@@ -873,6 +886,8 @@ const THUBApp = () => {
       { id: 'EOD', name: 'През ден (EOD)', perWeek: 3.5 },
       { id: '3xW', name: '3× седмично (Пон/Ср/Пет)', perWeek: 3 },
       { id: '2xW', name: '2× седмично (Пон/Чет)', perWeek: 2 },
+      { id: '1xW', name: '1× седмично', perWeek: 1 },
+      { id: '1x2W', name: '1× на 2 седмици', perWeek: 0.5 },
     ];
 
     // Get current compound and frequency
@@ -1477,6 +1492,7 @@ const THUBApp = () => {
     { id: 'test_e_250', name: 'Testosterone Enanthate 250mg/mL', shortName: 'Test Enanthate 250', concentration: 250, unit: 'mg' },
     { id: 'test_c_250', name: 'Testosterone Cypionate 250mg/mL', shortName: 'Test Cypionate 250', concentration: 250, unit: 'mg' },
     { id: 'test_p_100', name: 'Testosterone Propionate 100mg/mL', shortName: 'Test Propionate 100', concentration: 100, unit: 'mg' },
+    { id: 'test_u_250', name: 'Testosterone Undecanoate 250mg/mL', shortName: 'Test Undecanoate 250', concentration: 250, unit: 'mg' },
     { id: 'hcg', name: 'HCG 5000IU / 5mL', shortName: 'HCG', concentration: 1000, unit: 'IU' },
   ];
 
@@ -1485,6 +1501,8 @@ const THUBApp = () => {
     { id: 'EOD', name: 'През ден', shortName: 'EOD', perWeek: 3.5, periodDays: 14 },
     { id: '3xW', name: '3× седмично', shortName: '3xW', perWeek: 3, periodDays: 7 },
     { id: '2xW', name: '2× седмично', shortName: '2xW', perWeek: 2, periodDays: 7 },
+    { id: '1xW', name: '1× седмично', shortName: '1xW', perWeek: 1, periodDays: 7 },
+    { id: '1x2W', name: '1× на 2 седмици', shortName: '1x2W', perWeek: 0.5, periodDays: 14 },
   ];
 
   const monthNames = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
@@ -1553,7 +1571,7 @@ const THUBApp = () => {
       const hoursSince = (now - inj.date) / (1000 * 60 * 60);
       const daysSince = hoursSince / 24;
       
-      if (daysSince >= 0 && daysSince < 30) {
+      if (daysSince >= 0 && daysSince < halfLife * 10) {
         const d = actualDose * bio;
         const c = d * (ka / (ka - ke)) * (Math.exp(-ke * daysSince) - Math.exp(-ka * daysSince));
         currentConcentration += Math.max(0, c);
@@ -1563,7 +1581,9 @@ const THUBApp = () => {
     // Calculate THEORETICAL steady state peak
     const injectionInterval = proto.frequency === 'ED' ? 1 : 
                               proto.frequency === 'EOD' ? 2 : 
-                              proto.frequency === '3xW' ? 7/3 : 3.5;
+                              proto.frequency === '3xW' ? 7/3 : 
+                              proto.frequency === '1xW' ? 7 :
+                              proto.frequency === '1x2W' ? 14 : 3.5;
     
     let steadyStatePeak = 0;
     for (let checkDay = 28; checkDay <= 42; checkDay += 0.1) {
@@ -1571,7 +1591,7 @@ const THUBApp = () => {
       for (let injNum = 0; injNum <= Math.floor(checkDay / injectionInterval); injNum++) {
         const injDay = injNum * injectionInterval;
         const timeSinceInj = checkDay - injDay;
-        if (timeSinceInj >= 0 && timeSinceInj < 30) {
+        if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
           const d = actualDose * bio;
           const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
           conc += Math.max(0, c);
