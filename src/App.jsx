@@ -1720,19 +1720,19 @@ const THUBApp = () => {
 
   const missedInjection = hasMissedInjection();
 
-  // Open log modal with defaults
-  const openLogModal = (dayKey, dayDose, isToday = false) => {
+  // Open log modal with defaults (or existing data for edit)
+  const openLogModal = (dayKey, dayDose, isToday = false, existingData = null) => {
     const now = new Date();
     const defaultTime = isToday 
       ? `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
       : '12:00';
     
     setPendingLogDay(dayKey);
-    setLogTime(defaultTime);
-    setLogLocation(selectedLocation);
-    setLogSide(selectedSide);
-    setLogDose(dayDose);
-    setLogNote('');
+    setLogTime(existingData?.time || defaultTime);
+    setLogLocation(existingData?.location || selectedLocation);
+    setLogSide(existingData?.side || selectedSide);
+    setLogDose(existingData?.dose || dayDose);
+    setLogNote(existingData?.note || '');
     setShowLogModal(true);
   };
 
@@ -2155,7 +2155,12 @@ const THUBApp = () => {
                       if (todayCompleted) {
                         removeLoggedInjection(todayKey);
                       } else {
-                        openLogModal(todayKey, unitsRounded, true);
+                        const now = new Date();
+                        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                        setInjections(prev => ({
+                          ...prev,
+                          [todayKey]: { time: timeStr, dose: unitsRounded, location: selectedLocation, side: selectedSide }
+                        }));
                       }
                     }}
                     style={{ 
@@ -2247,34 +2252,21 @@ const THUBApp = () => {
                             let bgColor = '#0891b2'; // cyan - предстои
                             if (day.isCompleted) bgColor = '#059669'; // зелен - направено
                             
-                            // Може ли да се кликне (само ако е инжекционен ден и не е бъдещ)
-                            const canClick = day.isInjDay && !day.isFuture;
-                            
                             return (
-                              <button
+                              <div
                                 key={i}
-                                onClick={() => {
-                                  if (!canClick) return;
-                                  if (injections[day.dayKey]) {
-                                    removeLoggedInjection(day.dayKey);
-                                  } else {
-                                    openLogModal(day.dayKey, day.dose, day.isToday);
-                                  }
-                                }}
-                                disabled={!canClick}
                                 style={{ 
                                   backgroundColor: bgColor,
                                   minWidth: '40px',
-                                  cursor: canClick ? 'pointer' : 'default',
                                   opacity: day.isFuture ? 0.6 : 1,
                                   animation: day.isToday ? 'pulse 2s infinite' : 'none',
                                   boxShadow: day.isToday ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
                                 }}
-                                className="px-2 py-2 rounded-lg text-center border-0"
+                                className="px-2 py-2 rounded-lg text-center"
                               >
                                 <div style={{ color: 'white', fontSize: '10px', opacity: 0.8 }}>{day.dayName}</div>
                                 <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
-                              </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -2517,7 +2509,9 @@ const THUBApp = () => {
                   const doneLocation = injections[dateKey]?.location;
                   const doneSide = injections[dateKey]?.side;
                   const isToday = year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
-                  const dose = isInj ? getDoseForDate(date) : null;
+                  const isFuture = date > today;
+                  const dose = isInj ? (getDoseForDate(date) || unitsRounded) : 0;
+                  const canClick = !isFuture;
 
                   const locationEmoji = doneLocation === 'glute' ? '🍑' : 
                                         doneLocation === 'delt' ? '💪' : 
@@ -2526,24 +2520,42 @@ const THUBApp = () => {
                   const sideLabel = doneSide === 'left' ? 'Л' : doneSide === 'right' ? 'Д' : '';
 
                   cells.push(
-                    <div
+                    <button
                       key={day}
+                      onClick={() => {
+                        if (!canClick) return;
+                        if (done) {
+                          openLogModal(dateKey, dose, isToday, injections[dateKey]);
+                        } else {
+                          openLogModal(dateKey, dose, isToday);
+                        }
+                      }}
+                      disabled={!canClick}
                       style={{ 
-                        backgroundColor: isInj ? (done ? '#059669' : '#0891b2') : '#1e293b',
-                        borderColor: isToday ? '#22d3ee' : 'transparent'
+                        backgroundColor: done ? '#059669' : isInj ? '#0891b2' : '#1e293b',
+                        borderColor: isToday ? '#22d3ee' : 'transparent',
+                        cursor: canClick ? 'pointer' : 'default',
+                        opacity: isFuture ? 0.5 : 1
                       }}
                       className={`aspect-square rounded-lg flex flex-col items-center justify-center text-xs border-2`}
                     >
                       <span className="text-white font-semibold">{day}</span>
-                      {isInj && <span style={{ color: done ? '#d1fae5' : '#cffafe' }} className="text-xs">{dose}U</span>}
+                      {isInj && !done && <span style={{ color: '#cffafe' }} className="text-xs">{dose}U</span>}
+                      {done && <span style={{ color: '#d1fae5' }} className="text-xs">{injections[dateKey]?.dose}U</span>}
                       {done && locationEmoji && <span style={{ fontSize: '10px' }}>{locationEmoji}{sideLabel}</span>}
-                    </div>
+                      {done && doneTime && <span style={{ color: '#d1fae5', fontSize: '9px' }}>{doneTime}</span>}
+                    </button>
                   );
                 }
 
                 return cells;
               })()}
             </div>
+
+            {/* Инструкция */}
+            <p style={{ color: '#64748b' }} className="text-xs text-center mt-3">
+              Натисни върху ден за да логнеш, редактираш или добавиш пропусната инжекция. Точният час подобрява проследяването на протокола.
+            </p>
           </div>
 
           {/* Последни инжекции */}
