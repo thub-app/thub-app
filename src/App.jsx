@@ -930,6 +930,76 @@ const THUBApp = () => {
     // Generate PK data for graph with band
     const pkData = generatePkData(pkParams, actualDose, protocolData.frequency, 42, true);
 
+    // Rotation calculation for protocol screen
+    const protoInjectionsPerPeriod = protocolData.frequency === 'EOD' ? 7 : freq.perWeek;
+    const protoTargetPerPeriod = protocolData.frequency === 'EOD' ? protocolData.weeklyDose * 2 : protocolData.weeklyDose;
+
+    const protoRotation = (() => {
+      const lower = Math.floor(unitsRaw / protocolData.graduation) * protocolData.graduation;
+      const higher = lower + protocolData.graduation;
+      if (lower <= 0 || higher > 100) return null;
+      const lowerDose = (lower / 100) * compound.concentration;
+      const higherDose = (higher / 100) * compound.concentration;
+      let bestCombo = null;
+      let bestDelta = Infinity;
+      for (let higherCount = 0; higherCount <= protoInjectionsPerPeriod; higherCount++) {
+        const lowerCount = protoInjectionsPerPeriod - higherCount;
+        const totalMg = (lowerCount * lowerDose) + (higherCount * higherDose);
+        const delta = Math.abs(totalMg - protoTargetPerPeriod);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          bestCombo = { lowerCount, higherCount, lowerUnits: lower, higherUnits: higher };
+        }
+      }
+      if (bestCombo && bestCombo.lowerCount > 0 && bestCombo.higherCount > 0) return bestCombo;
+      return null;
+    })();
+
+    // Today's dose (considering rotation)
+    const protoTodayDose = (() => {
+      if (!protoRotation) return unitsRounded;
+      const today = new Date();
+      const startDate = new Date(protocolData.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      const checkDate = new Date(today);
+      checkDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((checkDate - startDate) / (1000 * 60 * 60 * 24));
+      const dayOfWeek = today.getDay();
+
+      let injectionIndex = 0;
+      if (protocolData.frequency === 'ED') {
+        injectionIndex = ((daysDiff % 7) + 7) % 7;
+      } else if (protocolData.frequency === 'EOD') {
+        const injNum = Math.floor(daysDiff / 2);
+        injectionIndex = ((injNum % 7) + 7) % 7;
+      } else if (protocolData.frequency === '2xW') {
+        const weekNum = Math.floor(daysDiff / 7);
+        const posInWeek = dayOfWeek === 1 ? 0 : 1;
+        injectionIndex = (weekNum * 2 + posInWeek) % 2;
+      } else if (protocolData.frequency === '3xW') {
+        const weekNum = Math.floor(daysDiff / 7);
+        const posInWeek = dayOfWeek === 1 ? 0 : dayOfWeek === 3 ? 1 : 2;
+        injectionIndex = (weekNum * 3 + posInWeek) % 3;
+      }
+
+      const schedule = [];
+      let higherUsed = 0;
+      for (let i = 0; i < protoInjectionsPerPeriod; i++) {
+        const expectedHigher = Math.round((i + 1) * protoRotation.higherCount / protoInjectionsPerPeriod);
+        if (higherUsed < expectedHigher) {
+          schedule.push(protoRotation.higherUnits);
+          higherUsed++;
+        } else {
+          schedule.push(protoRotation.lowerUnits);
+        }
+      }
+      return schedule[injectionIndex % schedule.length];
+    })();
+
+    const todayDoseMg = (protoTodayDose / 100) * compound.concentration;
+    const todayDoseMl = protoTodayDose / 100;
+    const dosesDiffer = protoRotation && protoTodayDose !== unitsRounded;
+
     return (
       <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }}>
         
@@ -1157,103 +1227,38 @@ const THUBApp = () => {
             </select>
           </div>
 
-          {/* Syringe Preview - ORIGINAL BIG VERSION */}
+          {/* Dose Summary */}
           <div 
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-6"
+            className="border rounded-2xl p-5"
           >
-            <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-4 text-center">
-              Preview на дозата
-            </label>
-            
-            <div className="flex items-center justify-center gap-8">
-              {/* Big Syringe */}
-              <div className="relative">
-                <div 
-                  style={{ backgroundColor: '#0a1628', borderColor: '#475569', width: '100px', height: '380px' }}
-                  className="relative border-2 rounded-xl overflow-hidden"
-                >
-                  {/* Graduation marks */}
-                  {(protocolData.graduation === 2
-                    ? Array.from({ length: 51 }, (_, i) => i * 2)
-                    : Array.from({ length: 51 }, (_, i) => i)
-                  ).map(tick => {
-                    const maxTick = protocolData.graduation === 2 ? 100 : 50;
-                    const pos = 4 + ((maxTick - tick) / maxTick) * 92;
-                    const isMajor = tick % 10 === 0;
-                    const isMedium = tick % 5 === 0 && !isMajor;
-
-                    return (
-                      <div 
-                        key={tick} 
-                        className="absolute w-full left-0 right-0"
-                        style={{ top: `${pos}%`, transform: 'translateY(-50%)' }}
-                      >
-                        <div className="flex items-center justify-between px-2">
-                          <div 
-                            style={{ 
-                              backgroundColor: isMajor ? '#e2e8f0' : isMedium ? '#64748b' : '#475569',
-                              width: isMajor ? '16px' : isMedium ? '10px' : '6px',
-                              height: isMajor ? '2px' : '1px'
-                            }}
-                          />
-                          {isMajor && (
-                            <span style={{ color: '#e2e8f0', fontSize: '11px' }} className="font-bold">{tick}</span>
-                          )}
-                          <div 
-                            style={{ 
-                              backgroundColor: isMajor ? '#e2e8f0' : isMedium ? '#64748b' : '#475569',
-                              width: isMajor ? '16px' : isMedium ? '10px' : '6px',
-                              height: isMajor ? '2px' : '1px'
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Liquid fill */}
-                  <div 
-                    style={{ 
-                      background: 'linear-gradient(to top, #0891b2, #06b6d4, #22d3ee)',
-                      height: `${4 + (displayUnits / maxUnits) * 92}%`,
-                      opacity: 0.6
-                    }}
-                    className="absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-b-lg"
-                  />
-                </div>
-
-                {/* Scale label */}
-                <div style={{ color: '#64748b' }} className="text-center text-xs mt-2">
-                  Скала {protocolData.graduation}U (0-{maxUnits}U)
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="text-center flex-1">
+                <div style={{ color: '#64748b' }} className="text-xs mb-1">Доза/инжекция</div>
+                <div style={{ color: '#22d3ee' }} className="text-4xl font-bold">{unitsRounded}U</div>
               </div>
-
-              {/* Dose Info */}
-              <div className="text-center">
-                <div style={{ color: '#64748b' }} className="text-sm mb-1">Дръпни до</div>
-                <div style={{ color: '#22d3ee' }} className="text-6xl font-bold mb-2">
-                  {unitsRounded}U
-                </div>
-                <div style={{ color: '#64748b' }} className="space-y-1 text-sm">
-                  <div>{actualDose.toFixed(1)} {compound.unit}</div>
-                  <div>{actualMl.toFixed(3)} mL</div>
-                </div>
-
-                {/* Scale indicator */}
-                <div 
-                  style={{ backgroundColor: '#1e3a5f' }}
-                  className="mt-4 px-3 py-2 rounded-lg"
-                >
-                  <span style={{ color: '#94a3b8' }} className="text-xs">
-                    {protocolData.graduation}U = {(protocolData.graduation / 100).toFixed(2)} mL = {((protocolData.graduation / 100) * compound.concentration).toFixed(1)} {compound.unit}
-                  </span>
-                </div>
+              <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
+              <div className="text-center flex-1">
+                <div style={{ color: '#64748b' }} className="text-xs mb-1">Активно вещество</div>
+                <div style={{ color: 'white' }} className="text-xl font-bold">{actualDose.toFixed(1)} {compound.unit}</div>
+              </div>
+              <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
+              <div className="text-center flex-1">
+                <div style={{ color: '#64748b' }} className="text-xs mb-1">Обем</div>
+                <div style={{ color: 'white' }} className="text-xl font-bold">{actualMl.toFixed(2)} mL</div>
               </div>
             </div>
+            {dosesDiffer && (
+              <div 
+                className="flex items-center justify-center gap-2 mt-3 pt-3"
+              >
+                <span className="text-sm">ℹ️</span>
+                <span style={{ color: '#e2e8f0' }} className="text-sm">
+                  Оптимизирана доза днес: <span style={{ color: '#22d3ee' }} className="font-bold">{protoTodayDose}U</span> · {todayDoseMg.toFixed(1)} {compound.unit} · {todayDoseMl.toFixed(2)} mL
+                </span>
+              </div>
+            )}
           </div>
-
-          {/* PK Graph - Normalized concentration (0-100%) with band */}
           <div 
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="border rounded-2xl p-4"
@@ -1329,68 +1334,113 @@ const THUBApp = () => {
             </div>
           </div>
 
-          {/* Stability Gauge */}
-          <div 
-            style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-            className="border rounded-2xl p-6"
-          >
-            <div className="flex items-center justify-between gap-6">
-              {/* Circular Gauge */}
-              <div className="relative w-32 h-32">
-                <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
-                  {/* Background circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="none"
-                    stroke="#1e293b"
-                    strokeWidth="12"
-                  />
-                  {/* Progress circle */}
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    fill="none"
-                    stroke={stabilityData.stability.base >= 70 ? '#10b981' : stabilityData.stability.base >= 50 ? '#f59e0b' : '#ef4444'}
-                    strokeWidth="12"
-                    strokeLinecap="round"
-                    strokeDasharray={`${stabilityData.stability.base * 2.51} 251`}
-                    style={{
-                      filter: `drop-shadow(0 0 8px ${stabilityData.stability.base >= 70 ? 'rgba(16, 185, 129, 0.5)' : stabilityData.stability.base >= 50 ? 'rgba(245, 158, 11, 0.5)' : 'rgba(239, 68, 68, 0.5)'})`
-                    }}
-                  />
-                </svg>
-                {/* Center text */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span 
-                    className="text-2xl font-bold"
-                    style={{ color: stabilityData.stability.base >= 70 ? '#10b981' : stabilityData.stability.base >= 50 ? '#f59e0b' : '#ef4444' }}
-                  >
-                    ~{stabilityData.stability.min}-{stabilityData.stability.max}%
-                  </span>
-                </div>
-              </div>
+          {/* Stability Index */}
+          {(() => {
+            const val = stabilityData.stability.base;
+            const valMin = stabilityData.stability.min;
+            const valMax = stabilityData.stability.max;
 
-              {/* Info */}
-              <div className="flex-1">
-                <h4 className="text-white font-semibold mb-2">Индекс на стабилност</h4>
-                <p style={{ color: '#64748b' }} className="text-sm mb-3">
-                  Показва колко стабилни са нивата между инжекциите.
-                </p>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span style={{ color: '#64748b' }}>Флуктуация:</span>
-                    <span style={{ color: '#94a3b8' }}>~{stabilityData.fluctuation.min}-{stabilityData.fluctuation.max}%</span>
+            // 270° arc (¾ circle, gap at bottom) — Oura/WHOOP style
+            const cx = 100, cy = 100, r = 80;
+            const strokeW = 14;
+            const gapDeg = 90;
+            const arcDeg = 360 - gapDeg;
+            const startDeg = 135;
+            const circumference = 2 * Math.PI * r;
+            const arcLen = (arcDeg / 360) * circumference;
+            const progressLen = (val / 100) * arcLen;
+
+            return (
+              <div 
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                className="border rounded-2xl p-6"
+              >
+                <div className="flex flex-col items-center">
+                  <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
+                    Индекс на стабилност
+                  </label>
+
+                  {/* Ring */}
+                  <div className="relative" style={{ width: '180px', height: '180px' }}>
+                    <svg viewBox="0 0 200 200" className="w-full h-full">
+                      <defs>
+                        <filter id="arcGlow">
+                          <feGaussianBlur stdDeviation="6" result="blur" />
+                          <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
+                        </filter>
+                        <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stopColor="#06b6d4" />
+                          <stop offset="100%" stopColor="#22d3ee" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Background track */}
+                      <circle
+                        cx={cx} cy={cy} r={r}
+                        fill="none"
+                        stroke="#1e293b"
+                        strokeWidth={strokeW}
+                        strokeLinecap="round"
+                        strokeDasharray={`${arcLen} ${circumference}`}
+                        strokeDashoffset={0}
+                        transform={`rotate(${startDeg} ${cx} ${cy})`}
+                      />
+
+                      {/* Active arc */}
+                      <circle
+                        cx={cx} cy={cy} r={r}
+                        fill="none"
+                        stroke="url(#arcGrad)"
+                        strokeWidth={strokeW}
+                        strokeLinecap="round"
+                        strokeDasharray={`${progressLen} ${circumference}`}
+                        strokeDashoffset={0}
+                        transform={`rotate(${startDeg} ${cx} ${cy})`}
+                        filter="url(#arcGlow)"
+                      />
+                    </svg>
+
+                    {/* Center content */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span 
+                        className="text-2xl font-bold"
+                        style={{ color: '#e2e8f0' }}
+                      >
+                        ~{valMin}-{valMax}%
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ color: '#475569' }} className="text-xs mt-2">
-                    Базирано на средни фармакокинетични данни
+
+                  {/* Detail cards */}
+                  <div className="w-full grid grid-cols-2 gap-3 mt-3">
+                    <div 
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                      className="border rounded-xl p-3 text-center"
+                    >
+                      <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Ниво преди следваща доза</div>
+                      <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityData.troughPercent.min}-{stabilityData.troughPercent.max}%</div>
+                      <div style={{ color: '#64748b' }} className="text-xs">от peak</div>
+                    </div>
+                    <div 
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                      className="border rounded-xl p-3 text-center"
+                    >
+                      <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Амплитуда на нивата</div>
+                      <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityData.fluctuation.min}-{stabilityData.fluctuation.max}%</div>
+                      <div style={{ color: '#64748b' }} className="text-xs">peak → trough</div>
+                    </div>
                   </div>
+
+                  <p style={{ color: '#334155' }} className="text-xs text-center mt-3">
+                    Базирано на средни фармакокинетични данни. Индивидуалната реакция варира.
+                  </p>
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Save Button */}
           <button
@@ -1925,8 +1975,8 @@ const THUBApp = () => {
                         {todayDose}U
                       </p>
                       <div style={{ color: '#64748b' }} className="text-sm mt-2 space-y-1">
-                        <p>{actualDose.toFixed(1)} {compound.unit}</p>
-                        <p>{actualMl.toFixed(2)} mL</p>
+                        <p>{((todayDose / 100) * compound.concentration).toFixed(1)} {compound.unit}</p>
+                        <p>{(todayDose / 100).toFixed(2)} mL</p>
                       </div>
                     </div>
                   </div>
@@ -2034,7 +2084,7 @@ const THUBApp = () => {
                         const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
                         setInjections(prev => ({
                           ...prev,
-                          [todayKey]: { time: timeStr, dose: unitsRounded, location: selectedLocation, side: selectedSide }
+                          [todayKey]: { time: timeStr, dose: todayDose, location: selectedLocation, side: selectedSide }
                         }));
                       }
                     }}
