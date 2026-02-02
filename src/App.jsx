@@ -1249,9 +1249,7 @@ const THUBApp = () => {
               </div>
             </div>
             {dosesDiffer && (
-              <div 
-                className="flex items-center justify-center gap-2 mt-3 pt-3"
-              >
+              <div className="flex items-center justify-center gap-2 mt-3 pt-3">
                 <span className="text-sm">ℹ️</span>
                 <span style={{ color: '#e2e8f0' }} className="text-sm">
                   Оптимизирана доза днес: <span style={{ color: '#22d3ee' }} className="font-bold">{protoTodayDose}U</span> · {todayDoseMg.toFixed(1)} {compound.unit} · {todayDoseMl.toFixed(2)} mL
@@ -1259,6 +1257,8 @@ const THUBApp = () => {
               </div>
             )}
           </div>
+
+          {/* PK Graph */}
           <div 
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="border rounded-2xl p-4"
@@ -1305,11 +1305,10 @@ const THUBApp = () => {
                     itemStyle={{ color: '#22d3ee' }}
                     formatter={(value, name) => {
                       if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
-                      return [null, null]; // Hide other series
+                      return [null, null];
                     }}
                     labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
                   />
-                  {/* Band area (min-max range) - hidden from legend/tooltip */}
                   <Area 
                     type="natural" 
                     dataKey="percentMax"
@@ -1317,7 +1316,6 @@ const THUBApp = () => {
                     fill="url(#pkBandGradient)"
                     legendType="none"
                   />
-                  {/* Main line */}
                   <Area 
                     type="natural" 
                     dataKey="percent" 
@@ -1340,7 +1338,6 @@ const THUBApp = () => {
             const valMin = stabilityData.stability.min;
             const valMax = stabilityData.stability.max;
 
-            // 270° arc (¾ circle, gap at bottom) — Oura/WHOOP style
             const cx = 100, cy = 100, r = 80;
             const strokeW = 14;
             const gapDeg = 90;
@@ -1360,7 +1357,6 @@ const THUBApp = () => {
                     Индекс на стабилност
                   </label>
 
-                  {/* Ring */}
                   <div className="relative" style={{ width: '180px', height: '180px' }}>
                     <svg viewBox="0 0 200 200" className="w-full h-full">
                       <defs>
@@ -1377,7 +1373,6 @@ const THUBApp = () => {
                         </linearGradient>
                       </defs>
 
-                      {/* Background track */}
                       <circle
                         cx={cx} cy={cy} r={r}
                         fill="none"
@@ -1389,7 +1384,6 @@ const THUBApp = () => {
                         transform={`rotate(${startDeg} ${cx} ${cy})`}
                       />
 
-                      {/* Active arc */}
                       <circle
                         cx={cx} cy={cy} r={r}
                         fill="none"
@@ -1403,7 +1397,6 @@ const THUBApp = () => {
                       />
                     </svg>
 
-                    {/* Center content */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <span 
                         className="text-2xl font-bold"
@@ -1414,7 +1407,6 @@ const THUBApp = () => {
                     </div>
                   </div>
 
-                  {/* Detail cards */}
                   <div className="w-full grid grid-cols-2 gap-3 mt-3">
                     <div 
                       style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
@@ -2113,258 +2105,6 @@ const THUBApp = () => {
                   </button>
                 </div>
 
-                {/* Оптимизация на протокола */}
-                {(() => {
-                  // EOD = 14 дни, останалите = 7 дни
-                  const isEOD = proto.frequency === 'EOD';
-                  const cycleDays = isEOD ? 14 : 7;
-                  
-                  const todayDayOfWeek = today.getDay(); // 0=Нд, 1=Пн...
-                  
-                  // Намираме понеделника на тази седмица
-                  const mondayOfWeek = new Date(today);
-                  const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
-                  mondayOfWeek.setDate(today.getDate() - daysFromMonday);
-                  
-                  // Имена на дните
-                  const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-                  
-                  // Генерираме дните за цикъла
-                  const cycleData = [];
-                  for (let i = 0; i < cycleDays; i++) {
-                    const dayDate = new Date(mondayOfWeek);
-                    dayDate.setDate(mondayOfWeek.getDate() + i);
-                    
-                    const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
-                    const isInjDay = isInjectionDay(dayDate);
-                    const dose = isInjDay ? (getDoseForDate(dayDate) || unitsRounded) : 0;
-                    const isCompleted = !!injections[dayKey];
-                    const isToday = dayDate.toDateString() === today.toDateString();
-                    const isFuture = dayDate > today;
-                    const dayName = dayNamesShort[dayDate.getDay()];
-                    
-                    cycleData.push({ dayName, dayDate, dayKey, isInjDay, dose, isCompleted, isToday, isFuture });
-                  }
-                  
-                  // Броим инжекции и дози за цикъла
-                  const cycleInjections = cycleData.filter(d => d.isInjDay);
-                  const cycleTotalMg = cycleInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
-                  const weeklyMg = isEOD ? cycleTotalMg / 2 : cycleTotalMg;
-                  
-                  // Групираме дозите за формулата
-                  const doseCounts = {};
-                  cycleInjections.forEach(d => {
-                    doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1;
-                  });
-                  const doseFormula = Object.entries(doseCounts)
-                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-                    .map(([dose, count]) => `${count}×${dose}U`)
-                    .join(' + ');
-                  
-                  return (
-                    <div 
-                      style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                      className="border rounded-2xl p-4"
-                    >
-                      <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">
-                        Оптимизация на протокола {isEOD ? '(14 дни)' : ''}
-                      </p>
-                      
-                      <div className="overflow-x-auto pt-2 pb-2">
-                        <div className="flex gap-2 min-w-max justify-center px-1">
-                          {cycleData.map((day, i) => {
-                            // Определяме цвета
-                            let bgColor = '#0891b2'; // cyan - предстои
-                            if (day.isCompleted) bgColor = '#059669'; // зелен - направено
-                            
-                            return (
-                              <div
-                                key={i}
-                                style={{ 
-                                  backgroundColor: bgColor,
-                                  minWidth: '40px',
-                                  opacity: day.isFuture ? 0.6 : 1,
-                                  animation: day.isToday ? 'pulse 2s infinite' : 'none',
-                                  boxShadow: day.isToday ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
-                                }}
-                                className="px-2 py-2 rounded-lg text-center"
-                              >
-                                <div style={{ color: 'white', fontSize: '10px', opacity: 0.8 }}>{day.dayName}</div>
-                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      
-                      {/* Формула */}
-                      <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
-                        {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/сед
-                      </p>
-                    </div>
-                  );
-                })()}
-                
-                {/* CSS за pulse анимация */}
-                <style>{`
-                  @keyframes pulse {
-                    0%, 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.5); }
-                    50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.2); }
-                  }
-                `}</style>
-
-                {/* Delta info (if no rotation) */}
-                {!rotation && Math.abs(deltaPct) > 0.01 && (
-                  <div 
-                    style={{ backgroundColor: '#1c1917', borderColor: '#78350f' }}
-                    className="border rounded-2xl p-4"
-                  >
-                    <p style={{ color: '#fbbf24' }} className="font-semibold mb-1">📊 Седмична делта</p>
-                    <p style={{ color: '#d97706' }} className="text-sm">
-                      {deltaAbs >= 0 ? '+' : ''}{deltaAbs.toFixed(1)} {compound.unit} ({(deltaPct * 100).toFixed(2)}%)
-                    </p>
-                  </div>
-                )}
-
-                {/* PK Graph - Normalized concentration (0-100%) with band */}
-                <div 
-                  style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                  className="border rounded-2xl p-4"
-                >
-                  <p style={{ color: '#64748b' }} className="text-sm font-medium mb-3 text-center">
-                    Относителна концентрация (6 седмици)
-                  </p>
-                  
-                  {/* Current status indicator with toggle */}
-                  {proto.showNowIndicator !== false && currentStatus ? (
-                    <div className="mb-3 p-2 rounded-lg relative" style={{ backgroundColor: '#1e293b' }}>
-                      <button
-                        onClick={() => {
-                          const newProfile = {
-                            ...profile,
-                            protocol: { ...profile.protocol, showNowIndicator: false }
-                          };
-                          setProfile(newProfile);
-                          saveToStorage('thub-profile', newProfile);
-                        }}
-                        className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
-                        style={{ backgroundColor: '#064e3b', color: '#10b981' }}
-                      >
-                        ON
-                      </button>
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                        <span style={{ color: '#fbbf24' }} className="text-sm font-medium">
-                          Сега: ~{currentStatus.currentPercent}% от steady state
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-center gap-3 mt-1 text-xs" style={{ color: '#64748b' }}>
-                        <span>{currentStatus.hoursSinceLastInjection}ч след инж.</span>
-                        <span>•</span>
-                        <span>Ден {currentStatus.daysOnProtocol}</span>
-                        <span>•</span>
-                        <span>{currentStatus.totalInjections} инж. логнати</span>
-                        {currentStatus.hoursToNextPeak > 0 && currentStatus.hoursSinceLastInjection < 48 && (
-                          <>
-                            <span>•</span>
-                            <span>Пик ~{currentStatus.hoursToNextPeak}ч</span>
-                          </>
-                        )}
-                      </div>
-                      {currentStatus.daysOnProtocol < 28 && (
-                        <p className="text-xs text-center mt-1" style={{ color: '#f59e0b' }}>
-                          ⚠️ Steady state след ~{28 - currentStatus.daysOnProtocol} дни
-                        </p>
-                      )}
-                    </div>
-                  ) : proto.showNowIndicator === false ? (
-                    <div className="mb-3 p-2 rounded-lg relative" style={{ backgroundColor: '#1e293b' }}>
-                      <button
-                        onClick={() => {
-                          const newProfile = {
-                            ...profile,
-                            protocol: { ...profile.protocol, showNowIndicator: true }
-                          };
-                          setProfile(newProfile);
-                          saveToStorage('thub-profile', newProfile);
-                        }}
-                        className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
-                        style={{ backgroundColor: '#1e293b', color: '#64748b', border: '1px solid #334155' }}
-                      >
-                        OFF
-                      </button>
-                      <p style={{ color: '#64748b' }} className="text-sm text-center py-1">
-                        Live статус изключен
-                      </p>
-                    </div>
-                  ) : null}
-                  
-                  <div className="h-40">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart 
-                        data={pkDataMain}
-                        margin={{ top: 5, right: 5, left: -15, bottom: 5 }}
-                      >
-                        <defs>
-                          <linearGradient id="pkGradientToday" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/>
-                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="pkBandGradientToday" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15}/>
-                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <XAxis 
-                          dataKey="day" 
-                          tick={{ fill: '#64748b', fontSize: 10 }}
-                          tickFormatter={(v) => `${Math.round(v)}д`}
-                          axisLine={{ stroke: '#334155' }}
-                          tickLine={{ stroke: '#334155' }}
-                          interval={40}
-                        />
-                        <YAxis 
-                          tick={{ fill: '#64748b', fontSize: 10 }}
-                          axisLine={{ stroke: '#334155' }}
-                          tickLine={{ stroke: '#334155' }}
-                          tickFormatter={(v) => `${v}%`}
-                          domain={[0, 110]}
-                          ticks={[0, 25, 50, 75, 100]}
-                        />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '8px' }}
-                          labelStyle={{ color: '#94a3b8' }}
-                          itemStyle={{ color: '#22d3ee' }}
-                          formatter={(value, name) => {
-                            if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
-                            return [null, null]; // Hide other series
-                          }}
-                          labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
-                        />
-                        {/* Band area (min-max range) - hidden from legend/tooltip */}
-                        <Area 
-                          type="natural" 
-                          dataKey="percentMax"
-                          stroke="none"
-                          fill="url(#pkBandGradientToday)"
-                          legendType="none"
-                        />
-                        {/* Main line */}
-                        <Area 
-                          type="natural" 
-                          dataKey="percent" 
-                          stroke="#06b6d4" 
-                          strokeWidth={2}
-                          fill="url(#pkGradientToday)" 
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  
-                  <p style={{ color: '#475569' }} className="text-xs text-center mt-2">
-                    t½ ~{pkParamsMain.halfLife.min.toFixed(1)}-{pkParamsMain.halfLife.max.toFixed(1)}д │ {pkParamsMain.modifiers.method}{pkParamsMain.modifiers.oil ? ` │ ${pkParamsMain.modifiers.oil}` : ''} │ Trough: ~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%
-                  </p>
-                </div>
               </>
             ) : (
               /* Rest Day */
@@ -2522,7 +2262,7 @@ const THUBApp = () => {
           </>
         )}
 
-        {/* STATS TAB */}
+        {/* PROTOCOL TAB */}
         {activeTab === 'stats' && (
           <div className="space-y-4">
             <div 
@@ -2612,6 +2352,415 @@ const THUBApp = () => {
                 <p style={{ color: '#64748b' }} className="text-sm">Седмици</p>
               </div>
             </div>
+
+            {/* Dose Summary */}
+            <div 
+              style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+              className="border rounded-2xl p-5"
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-center flex-1">
+                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Доза/инжекция</div>
+                  <div style={{ color: '#22d3ee' }} className="text-4xl font-bold">{unitsRounded}U</div>
+                </div>
+                <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
+                <div className="text-center flex-1">
+                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Активно вещество</div>
+                  <div style={{ color: 'white' }} className="text-xl font-bold">{actualDose.toFixed(1)} {compound.unit}</div>
+                </div>
+                <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
+                <div className="text-center flex-1">
+                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Обем</div>
+                  <div style={{ color: 'white' }} className="text-xl font-bold">{actualMl.toFixed(2)} mL</div>
+                </div>
+              </div>
+              {rotation && todayDose !== unitsRounded && (
+                <div className="flex items-center justify-center gap-2 mt-3 pt-3">
+                  <span className="text-sm">ℹ️</span>
+                  <span style={{ color: '#e2e8f0' }} className="text-sm">
+                    Оптимизирана доза днес: <span style={{ color: '#22d3ee' }} className="font-bold">{todayDose}U</span> · {((todayDose / 100) * compound.concentration).toFixed(1)} {compound.unit} · {(todayDose / 100).toFixed(2)} mL
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Оптимизация на протокола */}
+            {(() => {
+              const isEOD = proto.frequency === 'EOD';
+              const cycleDays = isEOD ? 14 : 7;
+              const todayDate = new Date();
+              const todayDayOfWeek = todayDate.getDay();
+              
+              const mondayOfWeek = new Date(todayDate);
+              const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
+              mondayOfWeek.setDate(todayDate.getDate() - daysFromMonday);
+              
+              const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+              
+              const cycleData = [];
+              for (let i = 0; i < cycleDays; i++) {
+                const dayDate = new Date(mondayOfWeek);
+                dayDate.setDate(mondayOfWeek.getDate() + i);
+                
+                const isInjDay = (() => {
+                  const dayOfWeek = dayDate.getDay();
+                  const startDate = new Date(proto.startDate);
+                  startDate.setHours(0, 0, 0, 0);
+                  const checkDate = new Date(dayDate);
+                  checkDate.setHours(0, 0, 0, 0);
+                  const daysDiff = Math.floor((checkDate - startDate) / (1000 * 60 * 60 * 24));
+                  if (proto.frequency === 'ED') return true;
+                  if (proto.frequency === 'EOD') return daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
+                  if (proto.frequency === '2xW') return dayOfWeek === 1 || dayOfWeek === 4;
+                  if (proto.frequency === '3xW') return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
+                  return false;
+                })();
+                
+                const dose = isInjDay ? (() => {
+                  if (!rotation) return unitsRounded;
+                  const startDate = new Date(proto.startDate);
+                  startDate.setHours(0, 0, 0, 0);
+                  const checkDate = new Date(dayDate);
+                  checkDate.setHours(0, 0, 0, 0);
+                  const daysDiff = Math.floor((checkDate - startDate) / (1000 * 60 * 60 * 24));
+                  const dayOfWeek = dayDate.getDay();
+                  let injectionIndex = 0;
+                  if (proto.frequency === 'ED') injectionIndex = ((daysDiff % 7) + 7) % 7;
+                  else if (proto.frequency === 'EOD') injectionIndex = ((Math.floor(daysDiff / 2) % 7) + 7) % 7;
+                  else if (proto.frequency === '2xW') injectionIndex = (Math.floor(daysDiff / 7) * 2 + (dayOfWeek === 1 ? 0 : 1)) % 2;
+                  else if (proto.frequency === '3xW') injectionIndex = (Math.floor(daysDiff / 7) * 3 + (dayOfWeek === 1 ? 0 : dayOfWeek === 3 ? 1 : 2)) % 3;
+                  const injectionsPerPeriod = proto.frequency === 'EOD' ? 7 : freq.perWeek;
+                  const schedule = [];
+                  let higherUsed = 0;
+                  for (let j = 0; j < injectionsPerPeriod; j++) {
+                    const expectedHigher = Math.round((j + 1) * rotation.higherCount / injectionsPerPeriod);
+                    if (higherUsed < expectedHigher) { schedule.push(rotation.higherUnits); higherUsed++; }
+                    else schedule.push(rotation.lowerUnits);
+                  }
+                  return schedule[injectionIndex % schedule.length];
+                })() : 0;
+                
+                const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
+                const isCompleted = !!injections[dayKey];
+                const isTodayDay = dayDate.toDateString() === todayDate.toDateString();
+                const isFuture = dayDate > todayDate;
+                const dayName = dayNamesShort[dayDate.getDay()];
+                
+                cycleData.push({ dayName, dayDate, dayKey, isInjDay, dose, isCompleted, isToday: isTodayDay, isFuture });
+              }
+              
+              const cycleInjections = cycleData.filter(d => d.isInjDay);
+              const cycleTotalMg = cycleInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
+              const weeklyMg = isEOD ? cycleTotalMg / 2 : cycleTotalMg;
+              
+              const doseCounts = {};
+              cycleInjections.forEach(d => { doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1; });
+              const doseFormula = Object.entries(doseCounts)
+                .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                .map(([dose, count]) => `${count}×${dose}U`)
+                .join(' + ');
+              
+              return (
+                <div 
+                  style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                  className="border rounded-2xl p-4"
+                >
+                  <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">
+                    Оптимизация на протокола {isEOD ? '(14 дни)' : ''}
+                  </p>
+                  
+                  <div className="overflow-x-auto pt-2 pb-2">
+                    <div className="flex gap-2 min-w-max justify-center px-1">
+                      {cycleData.map((day, i) => {
+                        let bgColor = '#0891b2';
+                        if (day.isCompleted) bgColor = '#059669';
+                        
+                        return (
+                          <div
+                            key={i}
+                            style={{ 
+                              backgroundColor: bgColor,
+                              minWidth: '40px',
+                              opacity: day.isFuture ? 0.6 : 1,
+                              animation: day.isToday ? 'pulse 2s infinite' : 'none',
+                              boxShadow: day.isToday ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
+                            }}
+                            className="px-2 py-2 rounded-lg text-center"
+                          >
+                            <div style={{ color: 'white', fontSize: '10px', opacity: 0.8 }}>{day.dayName}</div>
+                            <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
+                    {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/сед
+                  </p>
+                </div>
+              );
+            })()}
+            
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.5); }
+                50% { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.2); }
+              }
+            `}</style>
+
+            {/* Delta info (if no rotation) */}
+            {!rotation && Math.abs(deltaPct) > 0.01 && (
+              <div 
+                style={{ backgroundColor: '#1c1917', borderColor: '#78350f' }}
+                className="border rounded-2xl p-4"
+              >
+                <p style={{ color: '#fbbf24' }} className="font-semibold mb-1">📊 Седмична делта</p>
+                <p style={{ color: '#d97706' }} className="text-sm">
+                  {deltaAbs >= 0 ? '+' : ''}{deltaAbs.toFixed(1)} {compound.unit} ({(deltaPct * 100).toFixed(2)}%)
+                </p>
+              </div>
+            )}
+
+            {/* PK Graph - LIVE */}
+            <div 
+              style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+              className="border rounded-2xl p-4"
+            >
+              <p style={{ color: '#64748b' }} className="text-sm font-medium mb-3 text-center">
+                Относителна концентрация (6 седмици)
+              </p>
+              
+              {/* Current status indicator with toggle */}
+              {proto.showNowIndicator !== false && currentStatus ? (
+                <div className="mb-3 p-2 rounded-lg relative" style={{ backgroundColor: '#1e293b' }}>
+                  <button
+                    onClick={() => {
+                      const newProfile = {
+                        ...profile,
+                        protocol: { ...profile.protocol, showNowIndicator: false }
+                      };
+                      setProfile(newProfile);
+                      saveToStorage('thub-profile', newProfile);
+                    }}
+                    className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
+                    style={{ backgroundColor: '#064e3b', color: '#10b981' }}
+                  >
+                    ON
+                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                    <span style={{ color: '#fbbf24' }} className="text-sm font-medium">
+                      Сега: ~{currentStatus.currentPercent}% от steady state
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 mt-1 text-xs" style={{ color: '#64748b' }}>
+                    <span>{currentStatus.hoursSinceLastInjection}ч след инж.</span>
+                    <span>•</span>
+                    <span>Ден {currentStatus.daysOnProtocol}</span>
+                    <span>•</span>
+                    <span>{currentStatus.totalInjections} инж. логнати</span>
+                    {currentStatus.hoursToNextPeak > 0 && currentStatus.hoursSinceLastInjection < 48 && (
+                      <>
+                        <span>•</span>
+                        <span>Пик ~{currentStatus.hoursToNextPeak}ч</span>
+                      </>
+                    )}
+                  </div>
+                  {currentStatus.daysOnProtocol < 28 && (
+                    <p className="text-xs text-center mt-1" style={{ color: '#f59e0b' }}>
+                      ⚠️ Steady state след ~{28 - currentStatus.daysOnProtocol} дни
+                    </p>
+                  )}
+                </div>
+              ) : proto.showNowIndicator === false ? (
+                <div className="mb-3 p-2 rounded-lg relative" style={{ backgroundColor: '#1e293b' }}>
+                  <button
+                    onClick={() => {
+                      const newProfile = {
+                        ...profile,
+                        protocol: { ...profile.protocol, showNowIndicator: true }
+                      };
+                      setProfile(newProfile);
+                      saveToStorage('thub-profile', newProfile);
+                    }}
+                    className="absolute top-2 right-2 text-xs px-2 py-1 rounded"
+                    style={{ backgroundColor: '#1e293b', color: '#64748b', border: '1px solid #334155' }}
+                  >
+                    OFF
+                  </button>
+                  <p style={{ color: '#64748b' }} className="text-sm text-center py-1">
+                    Live статус изключен
+                  </p>
+                </div>
+              ) : null}
+              
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart 
+                    data={pkDataMain}
+                    margin={{ top: 5, right: 5, left: -15, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="pkGradientStats" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="pkBandGradientStats" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis 
+                      dataKey="day" 
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      tickFormatter={(v) => `${Math.round(v)}д`}
+                      axisLine={{ stroke: '#334155' }}
+                      tickLine={{ stroke: '#334155' }}
+                      interval={40}
+                    />
+                    <YAxis 
+                      tick={{ fill: '#64748b', fontSize: 10 }}
+                      axisLine={{ stroke: '#334155' }}
+                      tickLine={{ stroke: '#334155' }}
+                      tickFormatter={(v) => `${v}%`}
+                      domain={[0, 110]}
+                      ticks={[0, 25, 50, 75, 100]}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e3a5f', borderRadius: '8px' }}
+                      labelStyle={{ color: '#94a3b8' }}
+                      itemStyle={{ color: '#22d3ee' }}
+                      formatter={(value, name) => {
+                        if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
+                        return [null, null];
+                      }}
+                      labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
+                    />
+                    <Area 
+                      type="natural" 
+                      dataKey="percentMax"
+                      stroke="none"
+                      fill="url(#pkBandGradientStats)"
+                      legendType="none"
+                    />
+                    <Area 
+                      type="natural" 
+                      dataKey="percent" 
+                      stroke="#06b6d4" 
+                      strokeWidth={2}
+                      fill="url(#pkGradientStats)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              
+              <div style={{ color: '#475569' }} className="text-xs text-center mt-2">
+                t½ ~{pkParamsMain.halfLife.min.toFixed(1)}-{pkParamsMain.halfLife.max.toFixed(1)}д │ {pkParamsMain.modifiers.method}{pkParamsMain.modifiers.oil ? ` │ ${pkParamsMain.modifiers.oil}` : ''} │ Trough: ~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%
+              </div>
+            </div>
+
+            {/* Stability Index */}
+            {(() => {
+              const val = stabilityDataMain.stability.base;
+              const valMin = stabilityDataMain.stability.min;
+              const valMax = stabilityDataMain.stability.max;
+
+              const cx = 100, cy = 100, r = 80;
+              const strokeW = 14;
+              const gapDeg = 90;
+              const arcDeg = 360 - gapDeg;
+              const startDeg = 135;
+              const circumference = 2 * Math.PI * r;
+              const arcLen = (arcDeg / 360) * circumference;
+              const progressLen = (val / 100) * arcLen;
+
+              return (
+                <div 
+                  style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                  className="border rounded-2xl p-6"
+                >
+                  <div className="flex flex-col items-center">
+                    <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
+                      Индекс на стабилност
+                    </label>
+
+                    <div className="relative" style={{ width: '180px', height: '180px' }}>
+                      <svg viewBox="0 0 200 200" className="w-full h-full">
+                        <defs>
+                          <filter id="arcGlowStats">
+                            <feGaussianBlur stdDeviation="6" result="blur" />
+                            <feMerge>
+                              <feMergeNode in="blur" />
+                              <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                          </filter>
+                          <linearGradient id="arcGradStats" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#06b6d4" />
+                            <stop offset="100%" stopColor="#22d3ee" />
+                          </linearGradient>
+                        </defs>
+
+                        <circle
+                          cx={cx} cy={cy} r={r}
+                          fill="none"
+                          stroke="#1e293b"
+                          strokeWidth={strokeW}
+                          strokeLinecap="round"
+                          strokeDasharray={`${arcLen} ${circumference}`}
+                          strokeDashoffset={0}
+                          transform={`rotate(${startDeg} ${cx} ${cy})`}
+                        />
+
+                        <circle
+                          cx={cx} cy={cy} r={r}
+                          fill="none"
+                          stroke="url(#arcGradStats)"
+                          strokeWidth={strokeW}
+                          strokeLinecap="round"
+                          strokeDasharray={`${progressLen} ${circumference}`}
+                          strokeDashoffset={0}
+                          transform={`rotate(${startDeg} ${cx} ${cy})`}
+                          filter="url(#arcGlowStats)"
+                        />
+                      </svg>
+
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span 
+                          className="text-2xl font-bold"
+                          style={{ color: '#e2e8f0' }}
+                        >
+                          ~{valMin}-{valMax}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="w-full grid grid-cols-2 gap-3 mt-3">
+                      <div 
+                        style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                        className="border rounded-xl p-3 text-center"
+                      >
+                        <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Ниво преди следваща доза</div>
+                        <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%</div>
+                        <div style={{ color: '#64748b' }} className="text-xs">от peak</div>
+                      </div>
+                      <div 
+                        style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                        className="border rounded-xl p-3 text-center"
+                      >
+                        <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Амплитуда на нивата</div>
+                        <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityDataMain.fluctuation.min}-{stabilityDataMain.fluctuation.max}%</div>
+                        <div style={{ color: '#64748b' }} className="text-xs">peak → trough</div>
+                      </div>
+                    </div>
+
+                    <p style={{ color: '#334155' }} className="text-xs text-center mt-3">
+                      Базирано на средни фармакокинетични данни. Индивидуалната реакция варира.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Protocol History */}
             {profile.protocolHistory && profile.protocolHistory.length > 0 && (
@@ -2846,7 +2995,7 @@ const THUBApp = () => {
         {[
           { id: 'today', icon: '🏠', label: 'Днес' },
           { id: 'calendar', icon: '📅', label: 'Календар' },
-          { id: 'stats', icon: '📊', label: 'Статистика' },
+          { id: 'stats', icon: '📋', label: 'Протокол' },
           { id: 'journal', icon: '📝', label: 'Журнал' },
           { id: 'settings', icon: '⚙️', label: 'Настройки' },
         ].map(tab => (
