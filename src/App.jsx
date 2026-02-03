@@ -640,7 +640,6 @@ const THUBApp = () => {
 
   // Calculate effective date based on selected option
   const getEffectiveDate = () => {
-    if (effectiveFromOption === 'today') return new Date().toISOString().split('T')[0];
     if (effectiveFromOption === 'custom') return effectiveFromCustomDate;
     return getNextInjectionDateFromToday(); // 'next'
   };
@@ -681,7 +680,8 @@ const THUBApp = () => {
         changes: detectedChanges.map(c => `${c.field}: ${c.from} → ${c.to}`).join(', '),
         oldProtocol: { ...profile.protocol },
         newProtocol: { ...protocolData },
-        effectiveFrom: getEffectiveDate()
+        effectiveFrom: getEffectiveDate(),
+        effectiveMethod: effectiveFromOption === 'next' ? 'Следваща инжекция' : 'Избрана дата'
       };
       newHistory = [...newHistory, historyEntry];
     }
@@ -1588,7 +1588,6 @@ const THUBApp = () => {
                 <div className="space-y-2">
                   {[
                     { id: 'next', label: `От следващата инжекция (${getNextInjectionDateFromToday()})` },
-                    { id: 'today', label: `От днес (${new Date().toISOString().split('T')[0]})` },
                     { id: 'custom', label: 'Избери дата' }
                   ].map(opt => (
                     <button
@@ -1609,6 +1608,7 @@ const THUBApp = () => {
                     <input
                       type="date"
                       value={effectiveFromCustomDate}
+                      min={new Date().toISOString().split('T')[0]}
                       onChange={(e) => setEffectiveFromCustomDate(e.target.value)}
                       style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
                       className="w-full px-4 py-3 border rounded-xl focus:outline-none mt-2"
@@ -2957,6 +2957,7 @@ const THUBApp = () => {
                       {entry.effectiveFrom && (
                         <p style={{ color: '#f59e0b' }} className="text-xs mb-1">
                           Важи от: {new Date(entry.effectiveFrom).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {entry.effectiveMethod && <span style={{ color: '#64748b' }}> ({entry.effectiveMethod})</span>}
                         </p>
                       )}
                       <p style={{ color: '#94a3b8' }} className="text-sm italic">
