@@ -36,6 +36,16 @@ const THUBApp = () => {
         saveToStorage('thub-profile', saved);
       }
     }
+    // Migrate to protocolVersions
+    if (saved.protocol && !saved.protocolVersions) {
+      saved.protocolVersions = [{
+        ...saved.protocol,
+        effectiveFrom: saved.protocol.startDate,
+        createdAt: saved.lastModified || new Date().toISOString(),
+        note: null
+      }];
+      saveToStorage('thub-profile', saved);
+    }
     return saved;
   };
 
@@ -342,6 +352,8 @@ const THUBApp = () => {
   const [showChangeModal, setShowChangeModal] = useState(false);
   const [detectedChanges, setDetectedChanges] = useState([]);
   const [changeReason, setChangeReason] = useState('');
+  const [effectiveFromOption, setEffectiveFromOption] = useState('next'); // 'next' | 'today' | 'custom'
+  const [effectiveFromCustomDate, setEffectiveFromCustomDate] = useState('');
 
   // Log injection modal state
   const [showLogModal, setShowLogModal] = useState(false);
@@ -585,6 +597,8 @@ const THUBApp = () => {
         // Има промени - показваме modal за потвърждение
         setDetectedChanges(changes);
         setChangeReason('');
+        setEffectiveFromOption('next');
+        setEffectiveFromCustomDate(new Date().toISOString().split('T')[0]);
         setShowChangeModal(true);
         return;
       }
@@ -594,19 +608,80 @@ const THUBApp = () => {
     saveProtocol();
   };
 
+  // Find next injection date from today using CURRENT protocol
+  const getNextInjectionDateFromToday = () => {
+    const proto = profile.protocol;
+    if (!proto) return new Date().toISOString().split('T')[0];
+    const freq = proto.frequency;
+    const startDate = new Date(proto.startDate);
+    startDate.setHours(0, 0, 0, 0);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    for (let i = 1; i <= 14; i++) {
+      const check = new Date(now);
+      check.setDate(check.getDate() + i);
+      check.setHours(0, 0, 0, 0);
+      const dayOfWeek = check.getDay();
+      const daysDiff = Math.floor((check - startDate) / (1000 * 60 * 60 * 24));
+      
+      let isInj = false;
+      if (freq === 'ED') isInj = true;
+      else if (freq === 'EOD') isInj = daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
+      else if (freq === '2xW') isInj = dayOfWeek === 1 || dayOfWeek === 4;
+      else if (freq === '3xW') isInj = dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
+      
+      if (isInj) return check.toISOString().split('T')[0];
+    }
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
+
+  // Calculate effective date based on selected option
+  const getEffectiveDate = () => {
+    if (effectiveFromOption === 'today') return new Date().toISOString().split('T')[0];
+    if (effectiveFromOption === 'custom') return effectiveFromCustomDate;
+    return getNextInjectionDateFromToday(); // 'next'
+  };
+
   const saveProtocol = (reason = null) => {
     const now = new Date().toISOString();
     
-    // Подготвяме history entry ако има промени
-    let newHistory = profile.protocolHistory || [];
+    let newVersions = profile.protocolVersions || [];
     
+    if (reason && profile.protocol) {
+      // Versioned save — добавяме нова версия
+      const effectiveFrom = getEffectiveDate();
+      
+      const newVersion = {
+        ...protocolData,
+        effectiveFrom: effectiveFrom,
+        createdAt: now,
+        note: reason
+      };
+      
+      newVersions = [...newVersions, newVersion];
+    } else if (!profile.protocolConfigured) {
+      // First-time save — създаваме първата версия
+      newVersions = [{
+        ...protocolData,
+        effectiveFrom: protocolData.startDate,
+        createdAt: now,
+        note: null
+      }];
+    }
+    
+    // Подготвяме history entry за backwards compat
+    let newHistory = profile.protocolHistory || [];
     if (reason && profile.protocol) {
       const historyEntry = {
         date: now,
         reason: reason,
         changes: detectedChanges.map(c => `${c.field}: ${c.from} → ${c.to}`).join(', '),
         oldProtocol: { ...profile.protocol },
-        newProtocol: { ...protocolData }
+        newProtocol: { ...protocolData },
+        effectiveFrom: getEffectiveDate()
       };
       newHistory = [...newHistory, historyEntry];
     }
@@ -615,6 +690,7 @@ const THUBApp = () => {
       ...profile,
       protocol: protocolData,
       protocolConfigured: true,
+      protocolVersions: newVersions,
       protocolHistory: newHistory,
       lastModified: now
     };
@@ -1504,6 +1580,43 @@ const THUBApp = () => {
                 />
               </div>
 
+              {/* Effective From */}
+              <div className="mb-4">
+                <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
+                  Промяната важи от:
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { id: 'next', label: `От следващата инжекция (${getNextInjectionDateFromToday()})` },
+                    { id: 'today', label: `От днес (${new Date().toISOString().split('T')[0]})` },
+                    { id: 'custom', label: 'Избери дата' }
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setEffectiveFromOption(opt.id)}
+                      style={{ 
+                        backgroundColor: effectiveFromOption === opt.id ? 'rgba(6, 182, 212, 0.15)' : '#0a1628',
+                        borderColor: effectiveFromOption === opt.id ? '#0891b2' : '#1e3a5f'
+                      }}
+                      className="w-full px-4 py-3 border rounded-xl text-left text-sm transition-all"
+                    >
+                      <span style={{ color: effectiveFromOption === opt.id ? '#22d3ee' : '#94a3b8' }}>
+                        {effectiveFromOption === opt.id ? '● ' : '○ '}{opt.label}
+                      </span>
+                    </button>
+                  ))}
+                  {effectiveFromOption === 'custom' && (
+                    <input
+                      type="date"
+                      value={effectiveFromCustomDate}
+                      onChange={(e) => setEffectiveFromCustomDate(e.target.value)}
+                      style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
+                      className="w-full px-4 py-3 border rounded-xl focus:outline-none mt-2"
+                    />
+                  )}
+                </div>
+              </div>
+
               {/* Buttons */}
               <div className="flex gap-3">
                 <button
@@ -1717,19 +1830,42 @@ const THUBApp = () => {
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
 
+  // Get protocol version that applies to a specific date
+  const getProtocolForDate = (date) => {
+    const versions = profile.protocolVersions || [];
+    if (versions.length === 0) return proto;
+    
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    
+    // Sort by effectiveFrom descending
+    const sorted = [...versions].sort((a, b) => new Date(b.effectiveFrom) - new Date(a.effectiveFrom));
+    
+    // Find first version where effectiveFrom <= date
+    for (const v of sorted) {
+      const effDate = new Date(v.effectiveFrom);
+      effDate.setHours(0, 0, 0, 0);
+      if (effDate <= checkDate) return v;
+    }
+    
+    // Fallback to earliest version
+    return sorted[sorted.length - 1];
+  };
+
   // Check if today is injection day
   const isInjectionDay = (date) => {
+    const p = getProtocolForDate(date);
     const dayOfWeek = date.getDay();
-    const startDate = new Date(proto.startDate);
+    const startDate = new Date(p.startDate);
     startDate.setHours(0, 0, 0, 0);
     const checkDate = new Date(date);
     checkDate.setHours(0, 0, 0, 0);
     const daysDiff = Math.floor((checkDate - startDate) / (1000 * 60 * 60 * 24));
 
-    if (proto.frequency === 'ED') return true;
-    if (proto.frequency === 'EOD') return daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
-    if (proto.frequency === '2xW') return dayOfWeek === 1 || dayOfWeek === 4;
-    if (proto.frequency === '3xW') return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
+    if (p.frequency === 'ED') return true;
+    if (p.frequency === 'EOD') return daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
+    if (p.frequency === '2xW') return dayOfWeek === 1 || dayOfWeek === 4;
+    if (p.frequency === '3xW') return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
     return false;
   };
 
@@ -1739,8 +1875,12 @@ const THUBApp = () => {
 
   // Check for missed injections in the last 7 days
   const hasMissedInjection = () => {
-    const startDate = new Date(proto.startDate);
-    startDate.setHours(0, 0, 0, 0);
+    // Use earliest startDate from all versions
+    const versions = profile.protocolVersions || [];
+    const earliestStart = versions.length > 0 
+      ? new Date(versions.reduce((min, v) => v.startDate < min ? v.startDate : min, versions[0].startDate))
+      : new Date(proto.startDate);
+    earliestStart.setHours(0, 0, 0, 0);
     
     for (let i = 1; i <= 7; i++) {
       const checkDate = new Date(today);
@@ -1748,7 +1888,7 @@ const THUBApp = () => {
       checkDate.setHours(0, 0, 0, 0);
       
       // Don't check before protocol start
-      if (checkDate < startDate) continue;
+      if (checkDate < earliestStart) continue;
       
       if (isInjectionDay(checkDate)) {
         const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
@@ -1810,12 +1950,49 @@ const THUBApp = () => {
     });
   };
 
-  // Get dose for specific date (for rotation)
+  // Get dose for specific date (version-aware with rotation)
   const getDoseForDate = (date) => {
     if (!isInjectionDay(date)) return null;
-    if (!rotation) return unitsRounded;
+    
+    const p = getProtocolForDate(date);
+    const comp = compounds.find(c => c.id === p.compound) || compounds[0];
+    const fr = frequenciesData.find(f => f.id === p.frequency) || frequenciesData[1];
+    
+    const dosePI = p.weeklyDose / fr.perWeek;
+    const mlPI = dosePI / comp.concentration;
+    const uRaw = mlPI * 100;
+    const uRounded = Math.round(uRaw / p.graduation) * p.graduation;
+    
+    // Calculate rotation for this version
+    const injPerPeriod = p.frequency === 'EOD' ? 7 : fr.perWeek;
+    const targetPP = p.frequency === 'EOD' ? p.weeklyDose * 2 : p.weeklyDose;
+    
+    const lower = Math.floor(uRaw / p.graduation) * p.graduation;
+    const higher = lower + p.graduation;
+    
+    let rot = null;
+    if (lower > 0 && lower !== higher && higher <= 100) {
+      const lowerDose = (lower / 100) * comp.concentration;
+      const higherDose = (higher / 100) * comp.concentration;
+      let bestCombo = null;
+      let bestDelta = Infinity;
+      for (let hc = 0; hc <= injPerPeriod; hc++) {
+        const lc = injPerPeriod - hc;
+        const totalMg = (lc * lowerDose) + (hc * higherDose);
+        const delta = Math.abs(totalMg - targetPP);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          bestCombo = { lowerCount: lc, higherCount: hc, lowerUnits: lower, higherUnits: higher };
+        }
+      }
+      if (bestCombo && bestCombo.lowerCount > 0 && bestCombo.higherCount > 0) {
+        rot = bestCombo;
+      }
+    }
+    
+    if (!rot) return uRounded;
 
-    const startDate = new Date(proto.startDate);
+    const startDate = new Date(p.startDate);
     startDate.setHours(0, 0, 0, 0);
     const checkDate = new Date(date);
     checkDate.setHours(0, 0, 0, 0);
@@ -1823,16 +2000,16 @@ const THUBApp = () => {
     const dayOfWeek = date.getDay();
 
     let injectionIndex = 0;
-    if (proto.frequency === 'ED') {
+    if (p.frequency === 'ED') {
       injectionIndex = ((daysDiff % 7) + 7) % 7;
-    } else if (proto.frequency === 'EOD') {
+    } else if (p.frequency === 'EOD') {
       const injectionNumber = Math.floor(daysDiff / 2);
       injectionIndex = ((injectionNumber % 7) + 7) % 7;
-    } else if (proto.frequency === '2xW') {
+    } else if (p.frequency === '2xW') {
       const weekNumber = Math.floor(daysDiff / 7);
       const positionInWeek = dayOfWeek === 1 ? 0 : 1;
       injectionIndex = (weekNumber * 2 + positionInWeek) % 2;
-    } else if (proto.frequency === '3xW') {
+    } else if (p.frequency === '3xW') {
       const weekNumber = Math.floor(daysDiff / 7);
       const positionInWeek = dayOfWeek === 1 ? 0 : dayOfWeek === 3 ? 1 : 2;
       injectionIndex = (weekNumber * 3 + positionInWeek) % 3;
@@ -1841,13 +2018,13 @@ const THUBApp = () => {
     // Build rotation schedule
     const schedule = [];
     let higherUsed = 0;
-    for (let i = 0; i < injectionsPerPeriod; i++) {
-      const expectedHigher = Math.round((i + 1) * rotation.higherCount / injectionsPerPeriod);
+    for (let i = 0; i < injPerPeriod; i++) {
+      const expectedHigher = Math.round((i + 1) * rot.higherCount / injPerPeriod);
       if (higherUsed < expectedHigher) {
-        schedule.push(rotation.higherUnits);
+        schedule.push(rot.higherUnits);
         higherUsed++;
       } else {
-        schedule.push(rotation.lowerUnits);
+        schedule.push(rot.lowerUnits);
       }
     }
 
@@ -1867,7 +2044,7 @@ const THUBApp = () => {
     return (
       <div className="relative">
         <div 
-          style={{ backgroundColor: '#0f172a', borderColor: '#334155', width: '110px', height: '450px' }}
+          style={{ backgroundColor: '#0f172a', borderColor: '#334155', width: '125px', height: '500px' }}
           className="relative border-2 rounded-xl overflow-hidden"
         >
           {/* Logo at top inside syringe */}
@@ -1886,21 +2063,21 @@ const THUBApp = () => {
                 className="absolute w-full left-0 right-0"
                 style={{ top: `${pos}%`, transform: 'translateY(-50%)' }}
               >
-                <div className="flex items-center justify-between px-1">
+                <div className="flex items-center justify-between px-1.5">
                   <div 
                     style={{ 
                       backgroundColor: isMajor ? '#f1f5f9' : isMedium ? '#94a3b8' : '#64748b',
-                      width: isMajor ? '18px' : isMedium ? '12px' : '7px',
+                      width: isMajor ? '20px' : isMedium ? '14px' : '8px',
                       height: isMajor ? '3px' : isMedium ? '2px' : '1px'
                     }}
                   />
                   {isMajor && (
-                    <span style={{ color: '#f1f5f9', fontSize: '12px' }} className="font-bold">{tick}</span>
+                    <span style={{ color: '#f1f5f9', fontSize: '13px' }} className="font-bold">{tick}</span>
                   )}
                   <div 
                     style={{ 
                       backgroundColor: isMajor ? '#f1f5f9' : isMedium ? '#94a3b8' : '#64748b',
-                      width: isMajor ? '18px' : isMedium ? '12px' : '7px',
+                      width: isMajor ? '20px' : isMedium ? '14px' : '8px',
                       height: isMajor ? '3px' : isMedium ? '2px' : '1px'
                     }}
                   />
@@ -1940,22 +2117,19 @@ const THUBApp = () => {
 
             {todayIsInjectionDay ? (
               <>
-                {/* Main Card - Syringe + Dose */}
+                {/* Date */}
+                <div className="text-center pb-1">
+                  <span style={{ color: '#475569' }} className="text-sm font-medium">
+                    {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
+                  </span>
+                </div>
+
+                {/* Hero Card - Syringe + Dose */}
                 <div 
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                  className="border rounded-2xl p-6 relative"
+                  className="border rounded-2xl p-8"
                 >
-                  {/* Date badge top right */}
-                  <div className="absolute top-3 right-3">
-                    <span 
-                      style={{ color: '#22d3ee', backgroundColor: '#0a1628', borderColor: '#0891b2' }} 
-                      className="text-sm font-semibold px-3 py-1 rounded-full border"
-                    >
-                      {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-center gap-8 mt-4">
+                  <div className="flex items-center justify-center gap-8">
                     <SyringeMain units={todayDose} />
                     
                     <div className="text-center">
@@ -1972,16 +2146,22 @@ const THUBApp = () => {
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Location Picker */}
-                  <div className="mt-4">
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { id: 'glute', label: 'Глутеус', emoji: '🍑' },
-                        { id: 'delt', label: 'Делтоид', emoji: '💪' },
-                        { id: 'quad', label: 'Бедро', emoji: '🦵' },
-                        { id: 'abdomen', label: 'Корем', emoji: '⭕' }
-                      ].map(loc => (
+                {/* Location Picker */}
+                <div 
+                  style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                  className="border rounded-2xl p-4"
+                >
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { id: 'glute', label: 'Глутеус', emoji: '🍑' },
+                      { id: 'delt', label: 'Делтоид', emoji: '💪' },
+                      { id: 'quad', label: 'Бедро', emoji: '🦵' },
+                      { id: 'abdomen', label: 'Корем', emoji: '⭕' }
+                    ].map(loc => {
+                      const isSelected = selectedLocation === loc.id;
+                      return (
                         <button
                           key={loc.id}
                           onClick={() => {
@@ -1992,119 +2172,138 @@ const THUBApp = () => {
                           }}
                           disabled={todayCompleted}
                           style={{ 
-                            backgroundColor: selectedLocation === loc.id ? '#0891b2' : '#0a1628',
-                            borderColor: selectedLocation === loc.id ? '#0891b2' : '#1e3a5f',
-                            color: 'white',
+                            backgroundColor: isSelected ? 'rgba(8, 145, 178, 0.15)' : '#0a1628',
+                            borderColor: isSelected ? '#0891b2' : '#1e3a5f',
                             opacity: todayCompleted ? 0.5 : 1
                           }}
-                          className="py-3 border rounded-xl font-medium transition-colors text-sm flex items-center justify-center"
+                          className="py-3 border rounded-xl transition-all duration-200 flex flex-col items-center gap-1"
                         >
-                          <span>{loc.label}</span>
-                          {selectedLocation === loc.id && selectedSide && (
-                            <span style={{ color: '#22d3ee' }} className="ml-1">
-                              {selectedSide === 'left' ? 'Л' : 'Д'}
+                          <span className="text-lg">{loc.emoji}</span>
+                          <span style={{ color: isSelected ? '#22d3ee' : '#94a3b8' }} className="text-xs font-medium">{loc.label}</span>
+                          {isSelected && selectedSide && (
+                            <span style={{ color: '#0891b2' }} className="text-xs font-medium">
+                              {selectedSide === 'left' ? 'Ляво' : 'Дясно'}
                             </span>
                           )}
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
+                </div>
 
-                  {/* Location Side Modal */}
-                  {showLocationModal && pendingLocation && (
+                {/* Location Side Modal */}
+                {showLocationModal && pendingLocation && (
+                  <div 
+                    style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  >
                     <div 
-                      style={{ backgroundColor: 'rgba(0, 0, 0, 0.8)' }}
-                      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                      style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                      className="w-full max-w-sm border rounded-2xl p-6 shadow-2xl"
                     >
-                      <div 
-                        style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                        className="w-full max-w-sm border rounded-2xl p-6 shadow-2xl"
-                      >
-                        <div className="text-center mb-6">
-                          <span className="text-4xl">{pendingLocation.emoji}</span>
-                          <h3 className="text-white text-xl font-bold mt-2">{pendingLocation.label}</h3>
-                        </div>
+                      <div className="text-center mb-6">
+                        <span className="text-4xl">{pendingLocation.emoji}</span>
+                        <h3 className="text-white text-xl font-bold mt-2">{pendingLocation.label}</h3>
+                      </div>
 
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => {
-                              setSelectedLocation(pendingLocation.id);
-                              setSelectedSide('left');
-                              setShowLocationModal(false);
-                              setPendingLocation(null);
-                            }}
-                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
-                            className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
-                          >
-                            Ляво
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedLocation(pendingLocation.id);
-                              setSelectedSide('right');
-                              setShowLocationModal(false);
-                              setPendingLocation(null);
-                            }}
-                            style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
-                            className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
-                          >
-                            Дясно
-                          </button>
-                        </div>
-
+                      <div className="flex gap-3">
                         <button
                           onClick={() => {
+                            setSelectedLocation(pendingLocation.id);
+                            setSelectedSide('left');
                             setShowLocationModal(false);
                             setPendingLocation(null);
                           }}
-                          style={{ color: '#64748b' }}
-                          className="w-full mt-4 py-2 text-sm hover:text-white transition-colors"
+                          style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                          className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
                         >
-                          Отказ
+                          Ляво
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedLocation(pendingLocation.id);
+                            setSelectedSide('right');
+                            setShowLocationModal(false);
+                            setPendingLocation(null);
+                          }}
+                          style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
+                          className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
+                        >
+                          Дясно
                         </button>
                       </div>
+
+                      <button
+                        onClick={() => {
+                          setShowLocationModal(false);
+                          setPendingLocation(null);
+                        }}
+                        style={{ color: '#64748b' }}
+                        className="w-full mt-4 py-2 text-sm hover:text-white transition-colors"
+                      >
+                        Отказ
+                      </button>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* Action Button */}
-                  <button
-                    onClick={() => {
-                      if (todayCompleted) {
-                        removeLoggedInjection(todayKey);
-                      } else {
-                        const now = new Date();
-                        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                        setInjections(prev => ({
-                          ...prev,
-                          [todayKey]: { time: timeStr, dose: todayDose, location: selectedLocation, side: selectedSide }
-                        }));
-                      }
-                    }}
-                    style={{ 
-                      background: todayCompleted 
-                        ? 'linear-gradient(90deg, #059669, #10b981)' 
-                        : missedInjection 
-                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
-                          : 'linear-gradient(90deg, #06b6d4, #14b8a6)' 
-                    }}
-                    className={`w-full mt-6 py-4 text-white font-semibold rounded-xl transition-all ${
-                      !todayCompleted && missedInjection ? 'animate-pulse' : ''
-                    }`}
-                  >
-                    {todayCompleted 
-                      ? `✓ Направено ${injections[todayKey]?.time} ${
-                          injections[todayKey]?.location === 'glute' ? '🍑' : 
-                          injections[todayKey]?.location === 'delt' ? '💪' : 
-                          injections[todayKey]?.location === 'quad' ? '🦵' : 
-                          injections[todayKey]?.location === 'abdomen' ? '⭕' : ''
-                        }${injections[todayKey]?.side === 'left' ? 'Л' : injections[todayKey]?.side === 'right' ? 'Д' : ''}`
-                      : missedInjection 
-                        ? '⚠️ Пропусната инжекция! Маркирай'
-                        : '💉 Маркирай като направено'
+                {/* Action Button */}
+                <button
+                  onClick={() => {
+                    if (todayCompleted) {
+                      removeLoggedInjection(todayKey);
+                    } else {
+                      const now = new Date();
+                      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                      setInjections(prev => ({
+                        ...prev,
+                        [todayKey]: { time: timeStr, dose: todayDose, location: selectedLocation, side: selectedSide }
+                      }));
                     }
-                  </button>
-                </div>
+                  }}
+                  style={{ 
+                    background: todayCompleted 
+                      ? 'linear-gradient(90deg, #059669, #10b981)' 
+                      : missedInjection 
+                        ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                        : 'linear-gradient(90deg, #06b6d4, #14b8a6)' 
+                  }}
+                  className={`w-full py-4 text-white font-semibold rounded-xl transition-all ${
+                    !todayCompleted && missedInjection ? 'animate-pulse' : ''
+                  }`}
+                >
+                  {todayCompleted 
+                    ? `✓ Направено ${injections[todayKey]?.time} ${
+                        injections[todayKey]?.location === 'glute' ? '🍑' : 
+                        injections[todayKey]?.location === 'delt' ? '💪' : 
+                        injections[todayKey]?.location === 'quad' ? '🦵' : 
+                        injections[todayKey]?.location === 'abdomen' ? '⭕' : ''
+                      }${injections[todayKey]?.side === 'left' ? 'Л' : injections[todayKey]?.side === 'right' ? 'Д' : ''}`
+                    : missedInjection 
+                      ? '⚠️ Пропусната инжекция! Маркирай'
+                      : '💉 Маркирай като направено'
+                  }
+                </button>
 
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div 
+                    style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                    className="border rounded-2xl p-4 text-center"
+                  >
+                    <p style={{ color: '#22d3ee' }} className="text-2xl font-bold">{Object.keys(injections).length}</p>
+                    <p style={{ color: '#64748b' }} className="text-xs">Инжекции</p>
+                  </div>
+                  <div 
+                    style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                    className="border rounded-2xl p-4 text-center"
+                  >
+                    <p style={{ color: '#22d3ee' }} className="text-2xl font-bold">
+                      {Math.max(0, Math.floor((new Date() - new Date(proto.startDate)) / (1000 * 60 * 60 * 24 * 7)))}
+                    </p>
+                    <p style={{ color: '#64748b' }} className="text-xs">Седмици</p>
+                  </div>
+                </div>
               </>
             ) : (
               /* Rest Day */
@@ -2402,43 +2601,8 @@ const THUBApp = () => {
                 const dayDate = new Date(mondayOfWeek);
                 dayDate.setDate(mondayOfWeek.getDate() + i);
                 
-                const isInjDay = (() => {
-                  const dayOfWeek = dayDate.getDay();
-                  const startDate = new Date(proto.startDate);
-                  startDate.setHours(0, 0, 0, 0);
-                  const checkDate = new Date(dayDate);
-                  checkDate.setHours(0, 0, 0, 0);
-                  const daysDiff = Math.floor((checkDate - startDate) / (1000 * 60 * 60 * 24));
-                  if (proto.frequency === 'ED') return true;
-                  if (proto.frequency === 'EOD') return daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
-                  if (proto.frequency === '2xW') return dayOfWeek === 1 || dayOfWeek === 4;
-                  if (proto.frequency === '3xW') return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
-                  return false;
-                })();
-                
-                const dose = isInjDay ? (() => {
-                  if (!rotation) return unitsRounded;
-                  const startDate = new Date(proto.startDate);
-                  startDate.setHours(0, 0, 0, 0);
-                  const checkDate = new Date(dayDate);
-                  checkDate.setHours(0, 0, 0, 0);
-                  const daysDiff = Math.floor((checkDate - startDate) / (1000 * 60 * 60 * 24));
-                  const dayOfWeek = dayDate.getDay();
-                  let injectionIndex = 0;
-                  if (proto.frequency === 'ED') injectionIndex = ((daysDiff % 7) + 7) % 7;
-                  else if (proto.frequency === 'EOD') injectionIndex = ((Math.floor(daysDiff / 2) % 7) + 7) % 7;
-                  else if (proto.frequency === '2xW') injectionIndex = (Math.floor(daysDiff / 7) * 2 + (dayOfWeek === 1 ? 0 : 1)) % 2;
-                  else if (proto.frequency === '3xW') injectionIndex = (Math.floor(daysDiff / 7) * 3 + (dayOfWeek === 1 ? 0 : dayOfWeek === 3 ? 1 : 2)) % 3;
-                  const injectionsPerPeriod = proto.frequency === 'EOD' ? 7 : freq.perWeek;
-                  const schedule = [];
-                  let higherUsed = 0;
-                  for (let j = 0; j < injectionsPerPeriod; j++) {
-                    const expectedHigher = Math.round((j + 1) * rotation.higherCount / injectionsPerPeriod);
-                    if (higherUsed < expectedHigher) { schedule.push(rotation.higherUnits); higherUsed++; }
-                    else schedule.push(rotation.lowerUnits);
-                  }
-                  return schedule[injectionIndex % schedule.length];
-                })() : 0;
+                const isInjDay = isInjectionDay(dayDate);
+                const dose = isInjDay ? (getDoseForDate(dayDate) || unitsRounded) : 0;
                 
                 const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
                 const isCompleted = !!injections[dayKey];
@@ -2790,6 +2954,11 @@ const THUBApp = () => {
                       <p style={{ color: '#f87171' }} className="text-sm mb-1">
                         {entry.changes}
                       </p>
+                      {entry.effectiveFrom && (
+                        <p style={{ color: '#f59e0b' }} className="text-xs mb-1">
+                          Важи от: {new Date(entry.effectiveFrom).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
                       <p style={{ color: '#94a3b8' }} className="text-sm italic">
                         "{entry.reason}"
                       </p>
@@ -2975,6 +3144,19 @@ const THUBApp = () => {
               >
                 Отказ
               </button>
+              {pendingLogDay && injections[pendingLogDay] && (
+                <button
+                  onClick={() => {
+                    removeLoggedInjection(pendingLogDay);
+                    setShowLogModal(false);
+                    setPendingLogDay(null);
+                  }}
+                  style={{ backgroundColor: '#7f1d1d', color: '#fca5a5' }}
+                  className="py-3 px-4 rounded-xl font-medium"
+                >
+                  🗑️
+                </button>
+              )}
               <button
                 onClick={saveLoggedInjection}
                 style={{ background: 'linear-gradient(90deg, #06b6d4, #14b8a6)' }}
