@@ -1,5 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+
+// Error Boundary to catch and display crashes
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ backgroundColor: '#0a1628', color: '#f87171', minHeight: '100vh', padding: '2rem' }}>
+          <h2 style={{ color: '#fbbf24', fontSize: '1.5rem', marginBottom: '1rem' }}>⚠️ THUB Error</h2>
+          <pre style={{ color: '#94a3b8', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+            {this.state.error?.message}
+            {'\n\n'}
+            {this.state.error?.stack}
+          </pre>
+          <button 
+            onClick={() => { localStorage.clear(); window.location.reload(); }}
+            style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}
+          >
+            Reset App & Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const THUBApp = () => {
   // ============ STORAGE (localStorage for local/production) ============
@@ -365,10 +397,75 @@ const THUBApp = () => {
   const [logDose, setLogDose] = useState(0);
   const [logNote, setLogNote] = useState('');
   const [logMissReason, setLogMissReason] = useState('');
+  const [autoMissRan, setAutoMissRan] = useState(false);
   // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
   }, [injections]);
+
+  // Auto-miss on load: mark past unlogged injection days as MISSED
+  useEffect(() => {
+    if (autoMissRan || !profile.protocolConfigured || !profile.protocol) return;
+    setAutoMissRan(true);
+    
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const hour = new Date().getHours();
+    
+    const versions = profile.protocolVersions || [];
+    const proto = profile.protocol;
+    
+    // Inline isInjectionDay check (can't use the function as it's defined later)
+    const checkIsInjDay = (date) => {
+      // Find protocol version for date
+      let p = proto;
+      if (versions.length > 0) {
+        const checkD = new Date(date);
+        checkD.setHours(0, 0, 0, 0);
+        const sorted = [...versions].sort((a, b) => new Date(b.effectiveFrom) - new Date(a.effectiveFrom));
+        for (const v of sorted) {
+          const effDate = new Date(v.effectiveFrom);
+          effDate.setHours(0, 0, 0, 0);
+          if (effDate <= checkD) { p = v; break; }
+        }
+        if (p === proto && sorted.length > 0) p = sorted[sorted.length - 1];
+      }
+      
+      const dayOfWeek = date.getDay();
+      const startDate = new Date(p.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      const checkDate2 = new Date(date);
+      checkDate2.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((checkDate2 - startDate) / (1000 * 60 * 60 * 24));
+      
+      if (p.frequency === 'ED') return true;
+      if (p.frequency === 'EOD') return daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
+      if (p.frequency === '2xW') return dayOfWeek === 1 || dayOfWeek === 4;
+      if (p.frequency === '3xW') return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
+      return false;
+    };
+    
+    const updated = { ...injections };
+    let changed = false;
+    
+    const startDay = (hour >= 22) ? 0 : 1;
+    
+    for (let i = startDay; i <= 7; i++) {
+      const checkDate = new Date(todayDate);
+      checkDate.setDate(checkDate.getDate() - i);
+      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+      
+      if (updated[dateKey]) continue;
+      if (!checkIsInjDay(checkDate)) continue;
+      
+      updated[dateKey] = { status: 'missed' };
+      changed = true;
+    }
+    
+    if (changed) {
+      setInjections(updated);
+    }
+  }, [profile.protocolConfigured, autoMissRan]);
 
   // ============ PROTOCOL CHANGE DETECTION ============
   const compoundNames = {
@@ -1906,39 +2003,6 @@ const THUBApp = () => {
 
   const missedInjection = hasMissedInjection();
 
-  // Auto-miss on load: mark past unlogged injection days as MISSED
-  const [autoMissRan, setAutoMissRan] = useState(false);
-  useEffect(() => {
-    if (autoMissRan || !profile.protocolConfigured) return;
-    setAutoMissRan(true);
-    
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const hour = new Date().getHours();
-    
-    const updated = { ...injections };
-    let changed = false;
-    
-    // Check last 7 days (not including today unless after 22:00)
-    const startDay = (hour >= 22) ? 0 : 1;
-    
-    for (let i = startDay; i <= 7; i++) {
-      const checkDate = new Date(todayDate);
-      checkDate.setDate(checkDate.getDate() - i);
-      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
-      
-      if (updated[dateKey]) continue;
-      if (!isInjectionDay(checkDate)) continue;
-      
-      updated[dateKey] = { status: 'missed' };
-      changed = true;
-    }
-    
-    if (changed) {
-      setInjections(updated);
-    }
-  }, [profile.protocolConfigured, autoMissRan]);
-
   // Open log modal with defaults (or existing data for edit)
   const openLogModal = (dayKey, dayDose, isToday = false, existingData = null, defaultStatus = 'done') => {
     const now = new Date();
@@ -2414,17 +2478,19 @@ const THUBApp = () => {
                             const showPulse = day.isToday && isPlanned && day.isInjDay;
                             return (
                               <div key={i} style={{ 
-                                backgroundColor: '#0a1628',
-                                borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '3px solid transparent',
-                                minWidth: '40px',
-                                opacity: day.isFuture ? 0.6 : 1,
+                                backgroundColor: 'transparent',
+                                border: '1px solid #1e3a5f',
+                                borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '3px solid #1e3a5f',
+                                width: '46px',
+                                opacity: day.isFuture ? 0.5 : 1,
                                 animation: showPulse ? 'pulse 2s infinite' : 'none',
-                                boxShadow: showPulse ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
-                              }} className="px-2 py-2 rounded-lg text-center">
+                                boxShadow: showPulse ? '0 0 0 2px rgba(34, 211, 238, 0.4)' : 'none',
+                              }} className="py-2 rounded-lg text-center flex-shrink-0">
                                 <div style={{ color: '#94a3b8', fontSize: '10px' }}>{day.dayName}</div>
-                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
-                                {day.isDone && <div style={{ color: '#34d399', fontSize: '9px', fontWeight: 'bold' }}>✓</div>}
-                                {day.isMissed && <div style={{ color: '#fbbf24', fontSize: '9px', fontWeight: 'bold' }}>MISS</div>}
+                                <div style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '12px' }}>
+                                  {day.dose}U
+                                </div>
+                                {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>✓</div>}
                               </div>
                             );
                           })}
@@ -2781,19 +2847,21 @@ const THUBApp = () => {
                           <div
                             key={i}
                             style={{ 
-                              backgroundColor: '#0a1628',
-                              borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '3px solid transparent',
-                              minWidth: '40px',
-                              opacity: day.isFuture ? 0.6 : 1,
+                              backgroundColor: 'transparent',
+                              border: '1px solid #1e3a5f',
+                              borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '3px solid #1e3a5f',
+                              width: '46px',
+                              opacity: day.isFuture ? 0.5 : 1,
                               animation: showPulse ? 'pulse 2s infinite' : 'none',
-                              boxShadow: showPulse ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
+                              boxShadow: showPulse ? '0 0 0 2px rgba(34, 211, 238, 0.4)' : 'none',
                             }}
-                            className="px-2 py-2 rounded-lg text-center"
+                            className="py-2 rounded-lg text-center flex-shrink-0"
                           >
                             <div style={{ color: '#94a3b8', fontSize: '10px' }}>{day.dayName}</div>
-                            <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
-                            {day.isDone && <div style={{ color: '#34d399', fontSize: '9px', fontWeight: 'bold' }}>✓</div>}
-                            {day.isMissed && <div style={{ color: '#fbbf24', fontSize: '9px', fontWeight: 'bold' }}>MISS</div>}
+                            <div style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '12px' }}>
+                              {day.dose}U
+                            </div>
+                            {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>✓</div>}
                           </div>
                         );
                       })}
@@ -3412,4 +3480,10 @@ const THUBApp = () => {
   );
 };
 
-export default THUBApp;
+const THUBAppWithErrorBoundary = () => (
+  <ErrorBoundary>
+    <THUBApp />
+  </ErrorBoundary>
+);
+
+export default THUBAppWithErrorBoundary;
