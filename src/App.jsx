@@ -1,6 +1,32 @@
 import { useState, useEffect, Component } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
+// Data
+import {
+  compounds,
+  frequencies,
+  compoundNames,
+  frequencyNames,
+  sourceLabels,
+  oilLabels,
+  methodLabels,
+  monthNames,
+  dayNames
+} from './data/constants';
+
+// Utils
+import {
+  loadFromStorage,
+  saveToStorage,
+  migrateProfile
+} from './utils/storage';
+
+import {
+  getPkParameters,
+  generatePkData,
+  calculateStabilityWithRange
+} from './utils/calculations';
+
 // Error Boundary to catch and display crashes
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -34,257 +60,6 @@ class ErrorBoundary extends Component {
 }
 
 const THUBApp = () => {
-  // ============ STORAGE (localStorage for local/production) ============
-  const loadFromStorage = (key, defaultValue) => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : defaultValue;
-    } catch {
-      return defaultValue;
-    }
-  };
-
-  const saveToStorage = (key, value) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {}
-  };
-
-  // ============ MIGRATION ============
-  const migrateCompoundId = (oldId) => {
-    const migrations = {
-      'test_c_e_200': 'test_e_200',
-      'test_c_e_250': 'test_e_250',
-    };
-    return migrations[oldId] || oldId;
-  };
-
-  const migrateProfile = (saved) => {
-    if (!saved) return saved;
-    if (saved.protocol && saved.protocol.compound) {
-      const newCompoundId = migrateCompoundId(saved.protocol.compound);
-      if (newCompoundId !== saved.protocol.compound) {
-        saved.protocol.compound = newCompoundId;
-        saveToStorage('thub-profile', saved);
-      }
-    }
-    // Migrate to protocolVersions
-    if (saved.protocol && !saved.protocolVersions) {
-      saved.protocolVersions = [{
-        ...saved.protocol,
-        effectiveFrom: saved.protocol.startDate,
-        createdAt: saved.lastModified || new Date().toISOString(),
-        note: null
-      }];
-      saveToStorage('thub-profile', saved);
-    }
-    return saved;
-  };
-
-  // ============ PK PARAMETERS ============
-  // Pharmacokinetic parameters based on ester, method, oil, site, volume
-  const getPkParameters = (compoundId, method, oilType, site, volumeMl) => {
-    // Base parameters by ester
-    const esterParams = {
-      'test_p': { 
-        halfLife: { min: 0.8, base: 1.0, max: 1.2 },
-        tmax: { min: 0.5, base: 0.75, max: 1.0 }
-      },
-      'test_e': { 
-        halfLife: { min: 4.0, base: 4.5, max: 5.0 },
-        tmax: { min: 1.0, base: 1.5, max: 2.0 }
-      },
-      'test_c': { 
-        halfLife: { min: 5.0, base: 5.5, max: 6.0 },
-        tmax: { min: 1.5, base: 2.0, max: 2.5 }
-      },
-      'hcg': { 
-        halfLife: { min: 1.0, base: 1.5, max: 2.0 },
-        tmax: { min: 0.5, base: 1.0, max: 1.5 }
-      },
-      'test_u': { 
-        halfLife: { min: 18.0, base: 21.0, max: 24.0 },
-        tmax: { min: 5.0, base: 7.0, max: 9.0 }
-      },
-    };
-
-    // Method modifiers (affects absorption rate)
-    const methodModifier = {
-      'im': { absorption: 1.0, bioavailability: 0.70 },
-      'subq': { absorption: 1.12, bioavailability: 0.82 },
-    };
-
-    // Oil type modifiers
-    const oilModifier = {
-      'mct': 0.95,        // 5% faster
-      'grape_seed': 1.0,  // baseline
-      'sesame': 1.05,     // 5% slower
-      'castor': 1.10,     // 10% slower
-      'other': 1.0,
-      'unknown': 1.0,
-    };
-
-    // Site modifiers
-    const siteModifier = {
-      'glute': 1.08,      // larger muscle, slower
-      'delt': 1.0,        // baseline
-      'quad': 1.02,       // slightly slower
-      'abdomen': 1.12,    // SubQ typical site, slower
-    };
-
-    // Volume modifier
-    const getVolumeModifier = (ml) => {
-      if (ml < 0.3) return 0.95;   // faster absorption
-      if (ml > 0.5) return 1.08;   // slower absorption
-      return 1.0;
-    };
-
-    // Determine ester from compound ID
-    let esterKey = 'test_e'; // default
-    if (compoundId.includes('test_p') || compoundId.includes('prop')) esterKey = 'test_p';
-    else if (compoundId.includes('test_c') || compoundId.includes('cyp')) esterKey = 'test_c';
-    else if (compoundId.includes('test_u') || compoundId.includes('undec')) esterKey = 'test_u';
-    else if (compoundId.includes('test_e') || compoundId.includes('enan')) esterKey = 'test_e';
-    else if (compoundId.includes('hcg')) esterKey = 'hcg';
-
-    const ester = esterParams[esterKey] || esterParams['test_e'];
-    const methodMod = methodModifier[method] || methodModifier['im'];
-    const oilMod = oilModifier[oilType] || 1.0;
-    const siteMod = siteModifier[site] || 1.0;
-    const volMod = getVolumeModifier(volumeMl);
-
-    // Calculate adjusted parameters
-    const totalAbsorptionMod = methodMod.absorption * oilMod * siteMod * volMod;
-    
-    return {
-      halfLife: {
-        min: ester.halfLife.min * totalAbsorptionMod,
-        base: ester.halfLife.base * totalAbsorptionMod,
-        max: ester.halfLife.max * totalAbsorptionMod,
-      },
-      tmax: {
-        min: ester.tmax.min * totalAbsorptionMod,
-        base: ester.tmax.base * totalAbsorptionMod,
-        max: ester.tmax.max * totalAbsorptionMod,
-      },
-      bioavailability: methodMod.bioavailability,
-      modifiers: {
-        method: method === 'subq' ? 'SubQ' : 'IM',
-        oil: oilType !== 'unknown' ? oilType.toUpperCase().replace('_', ' ') : null,
-        site: site,
-      }
-    };
-  };
-
-  // Generate PK curve data with optional band (min/max)
-  const generatePkData = (pkParams, dose, frequency, days = 42, withBand = false) => {
-    const calculate = (halfLife, tmax, bio) => {
-      const ka = Math.log(2) / (tmax / 3);
-      const ke = Math.log(2) / halfLife;
-      const data = [];
-      const pointsPerDay = 12; // 12 points per day = every 2 hours
-      
-      const injectionInterval = frequency === 'ED' ? 1 : 
-                                frequency === 'EOD' ? 2 : 
-                                frequency === '3xW' ? 7/3 : 
-                                frequency === '1xW' ? 7 :
-                                frequency === '1x2W' ? 14 : 3.5;
-      
-      for (let i = 0; i <= days * pointsPerDay; i++) {
-        const t = i / pointsPerDay;
-        let concentration = 0;
-        
-        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
-          const injDay = injNum * injectionInterval;
-          const timeSinceInj = t - injDay;
-          if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
-            const d = dose * bio;
-            const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
-            concentration += Math.max(0, c);
-          }
-        }
-        
-        data.push({ day: t, concentration });
-      }
-      return data;
-    };
-
-    const baseData = calculate(pkParams.halfLife.base, pkParams.tmax.base, pkParams.bioavailability);
-    
-    // Find peak in steady state (days 28-42) for normalization
-    const steadyStateData = baseData.filter(d => d.day >= 28);
-    const peakConc = Math.max(...steadyStateData.map(d => d.concentration));
-    
-    // Normalize to 0-100% (no rounding for smooth curve)
-    const normalizedData = baseData.map(d => ({
-      day: d.day,
-      percent: peakConc > 0 ? (d.concentration / peakConc) * 100 : 0,
-    }));
-
-    if (withBand) {
-      const minData = calculate(pkParams.halfLife.min, pkParams.tmax.min, pkParams.bioavailability);
-      const maxData = calculate(pkParams.halfLife.max, pkParams.tmax.max, pkParams.bioavailability);
-      
-      // Find peaks for each
-      const minPeak = Math.max(...minData.filter(d => d.day >= 28).map(d => d.concentration));
-      const maxPeak = Math.max(...maxData.filter(d => d.day >= 28).map(d => d.concentration));
-      
-      return normalizedData.map((d, i) => ({
-        ...d,
-        percentMin: minPeak > 0 ? (minData[i].concentration / minPeak) * 100 : 0,
-        percentMax: maxPeak > 0 ? (maxData[i].concentration / maxPeak) * 100 : 0,
-      }));
-    }
-
-    return normalizedData;
-  };
-
-  // Calculate stability with range
-  const calculateStabilityWithRange = (pkParams, dose, frequency) => {
-    const calculateForParams = (halfLife, tmax, bio) => {
-      const ka = Math.log(2) / (tmax / 3);
-      const ke = Math.log(2) / halfLife;
-      const injectionInterval = frequency === 'ED' ? 1 : 
-                                frequency === 'EOD' ? 2 : 
-                                frequency === '3xW' ? 7/3 : 
-                                frequency === '1xW' ? 7 :
-                                frequency === '1x2W' ? 14 : 3.5;
-      
-      const concentrations = [];
-      const pointsPerDay = 24; // More points for accurate peak/trough detection
-      for (let i = 28 * pointsPerDay; i <= 42 * pointsPerDay; i++) {
-        const t = i / pointsPerDay;
-        let concentration = 0;
-        
-        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
-          const injDay = injNum * injectionInterval;
-          const timeSinceInj = t - injDay;
-          if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
-            const d = dose * bio;
-            const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
-            concentration += Math.max(0, c);
-          }
-        }
-        concentrations.push(concentration);
-      }
-      
-      const peak = Math.max(...concentrations);
-      const trough = Math.min(...concentrations);
-      const fluctuation = peak > 0 ? ((peak - trough) / peak) * 100 : 0;
-      return { stability: Math.round(100 - fluctuation), fluctuation: Math.round(fluctuation), troughPercent: Math.round((trough / peak) * 100) };
-    };
-
-    const base = calculateForParams(pkParams.halfLife.base, pkParams.tmax.base, pkParams.bioavailability);
-    const min = calculateForParams(pkParams.halfLife.min, pkParams.tmax.min, pkParams.bioavailability);
-    const max = calculateForParams(pkParams.halfLife.max, pkParams.tmax.max, pkParams.bioavailability);
-
-    return {
-      stability: { min: Math.min(min.stability, max.stability), base: base.stability, max: Math.max(min.stability, max.stability) },
-      fluctuation: { min: Math.min(min.fluctuation, max.fluctuation), base: base.fluctuation, max: Math.max(min.fluctuation, max.fluctuation) },
-      troughPercent: { min: Math.min(min.troughPercent, max.troughPercent), base: base.troughPercent, max: Math.max(min.troughPercent, max.troughPercent) },
-    };
-  };
-
   // ============ STATE ============
   const [currentStep, setCurrentStep] = useState(() => {
     const saved = migrateProfile(loadFromStorage('thub-profile', null));
@@ -468,25 +243,6 @@ const THUBApp = () => {
   }, [profile.protocolConfigured, autoMissRan]);
 
   // ============ PROTOCOL CHANGE DETECTION ============
-  const compoundNames = {
-    'test_c_200': 'Testosterone Cypionate 200mg/mL',
-    'test_e_200': 'Testosterone Enanthate 200mg/mL',
-    'test_e_250': 'Testosterone Enanthate 250mg/mL',
-    'test_c_250': 'Testosterone Cypionate 250mg/mL',
-    'test_p_100': 'Testosterone Propionate 100mg/mL',
-    'test_u_250': 'Testosterone Undecanoate 250mg/mL',
-    'hcg': 'HCG 5000IU / 5mL',
-  };
-
-  const frequencyNames = {
-    'ED': 'Всеки ден',
-    'EOD': 'През ден',
-    '3xW': '3× седмично',
-    '2xW': '2× седмично',
-    '1xW': '1× седмично',
-    '1x2W': '1× на 2 седмици',
-  };
-
   const detectProtocolChanges = (oldProto, newProto) => {
     if (!oldProto) return [];
     
@@ -533,7 +289,6 @@ const THUBApp = () => {
     }
 
     if (oldProto.source !== newProto.source) {
-      const sourceLabels = { pharmacy: 'Аптека', ugl: 'UGL', unknown: 'Не знам' };
       changes.push({
         field: 'Източник',
         from: sourceLabels[oldProto.source] || oldProto.source,
@@ -542,7 +297,6 @@ const THUBApp = () => {
     }
 
     if (oldProto.oilType !== newProto.oilType) {
-      const oilLabels = { mct: 'MCT', grape_seed: 'Grape Seed', sesame: 'Sesame', castor: 'Castor', other: 'Друго', unknown: 'Не знам' };
       changes.push({
         field: 'Масло',
         from: oilLabels[oldProto.oilType] || oldProto.oilType,
@@ -551,7 +305,6 @@ const THUBApp = () => {
     }
 
     if (oldProto.injectionMethod !== newProto.injectionMethod) {
-      const methodLabels = { im: 'IM', subq: 'SubQ' };
       changes.push({
         field: 'Метод',
         from: methodLabels[oldProto.injectionMethod] || oldProto.injectionMethod,
@@ -1053,26 +806,6 @@ const THUBApp = () => {
 
   // Protocol Setup Screen
   if (currentStep === 'protocol') {
-    // Compounds
-    const compounds = [
-      { id: 'test_c_200', name: 'Testosterone Cypionate 200mg/mL', concentration: 200, unit: 'mg' },
-      { id: 'test_e_200', name: 'Testosterone Enanthate 200mg/mL', concentration: 200, unit: 'mg' },
-      { id: 'test_e_250', name: 'Testosterone Enanthate 250mg/mL', concentration: 250, unit: 'mg' },
-      { id: 'test_c_250', name: 'Testosterone Cypionate 250mg/mL', concentration: 250, unit: 'mg' },
-      { id: 'test_p_100', name: 'Testosterone Propionate 100mg/mL', concentration: 100, unit: 'mg' },
-      { id: 'test_u_250', name: 'Testosterone Undecanoate 250mg/mL', concentration: 250, unit: 'mg' },
-      { id: 'hcg', name: 'HCG 5000IU / 5mL', concentration: 1000, unit: 'IU' },
-    ];
-
-    const frequencies = [
-      { id: 'ED', name: 'Всеки ден (ED)', perWeek: 7 },
-      { id: 'EOD', name: 'През ден (EOD)', perWeek: 3.5 },
-      { id: '3xW', name: '3× седмично (Пон/Ср/Пет)', perWeek: 3 },
-      { id: '2xW', name: '2× седмично (Пон/Чет)', perWeek: 2 },
-      { id: '1xW', name: '1× седмично', perWeek: 1 },
-      { id: '1x2W', name: '1× на 2 седмици', perWeek: 0.5 },
-    ];
-
     // Get current compound and frequency
     const compound = compounds.find(c => c.id === protocolData.compound) || compounds[0];
     const freq = frequencies.find(f => f.id === protocolData.frequency) || frequencies[1];
@@ -1747,33 +1480,10 @@ const THUBApp = () => {
 
   // ============ MAIN APP ============
   
-  // Compounds & Frequencies (same as protocol setup)
-  const compounds = [
-    { id: 'test_c_200', name: 'Testosterone Cypionate 200mg/mL', shortName: 'Test Cypionate 200', concentration: 200, unit: 'mg' },
-    { id: 'test_e_200', name: 'Testosterone Enanthate 200mg/mL', shortName: 'Test Enanthate 200', concentration: 200, unit: 'mg' },
-    { id: 'test_e_250', name: 'Testosterone Enanthate 250mg/mL', shortName: 'Test Enanthate 250', concentration: 250, unit: 'mg' },
-    { id: 'test_c_250', name: 'Testosterone Cypionate 250mg/mL', shortName: 'Test Cypionate 250', concentration: 250, unit: 'mg' },
-    { id: 'test_p_100', name: 'Testosterone Propionate 100mg/mL', shortName: 'Test Propionate 100', concentration: 100, unit: 'mg' },
-    { id: 'test_u_250', name: 'Testosterone Undecanoate 250mg/mL', shortName: 'Test Undecanoate 250', concentration: 250, unit: 'mg' },
-    { id: 'hcg', name: 'HCG 5000IU / 5mL', shortName: 'HCG', concentration: 1000, unit: 'IU' },
-  ];
-
-  const frequenciesData = [
-    { id: 'ED', name: 'Всеки ден', shortName: 'ED', perWeek: 7, periodDays: 7 },
-    { id: 'EOD', name: 'През ден', shortName: 'EOD', perWeek: 3.5, periodDays: 14 },
-    { id: '3xW', name: '3× седмично', shortName: '3xW', perWeek: 3, periodDays: 7 },
-    { id: '2xW', name: '2× седмично', shortName: '2xW', perWeek: 2, periodDays: 7 },
-    { id: '1xW', name: '1× седмично', shortName: '1xW', perWeek: 1, periodDays: 7 },
-    { id: '1x2W', name: '1× на 2 седмици', shortName: '1x2W', perWeek: 0.5, periodDays: 14 },
-  ];
-
-  const monthNames = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
-  const dayNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-
   // Get protocol from profile
   const proto = profile.protocol || protocolData;
   const compound = compounds.find(c => c.id === proto.compound) || compounds[0];
-  const freq = frequenciesData.find(f => f.id === proto.frequency) || frequenciesData[1];
+  const freq = frequencies.find(f => f.id === proto.frequency) || frequencies[1];
 
   // Calculations
   const dosePerInjection = proto.weeklyDose / freq.perWeek;
@@ -2071,7 +1781,7 @@ const THUBApp = () => {
     
     const p = getProtocolForDate(date);
     const comp = compounds.find(c => c.id === p.compound) || compounds[0];
-    const fr = frequenciesData.find(f => f.id === p.frequency) || frequenciesData[1];
+    const fr = frequencies.find(f => f.id === p.frequency) || frequencies[1];
     
     const dosePI = p.weeklyDose / fr.perWeek;
     const mlPI = dosePI / comp.concentration;
