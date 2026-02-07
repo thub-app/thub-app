@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from 'react';
+mport { useState, useEffect, Component } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
 // Data
