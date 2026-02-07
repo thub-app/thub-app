@@ -961,7 +961,6 @@ const THUBApp = () => {
 
               {/* Forgot password - signin only */}
               {authMode === 'signin' && (
-                <p style={{ color: '#64748b' }} className="text-sm text-center">
                 <button
                   onClick={handleForgotPassword}
                   style={{ color: '#64748b' }}
