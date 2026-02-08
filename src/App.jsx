@@ -2213,7 +2213,7 @@ const THUBApp = () => {
             className="absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-b-lg"
           />
         </div>
-        <div style={{ color: '#475569' }} className="text-center text-sm mt-2">
+        <div style={{ color: '#64748b' }} className="text-center text-xs mt-2">
           {proto.graduation}U = {(proto.graduation * compound.concentration / 100).toFixed(1)} {compound.unit}
         </div>
       </div>
@@ -2326,18 +2326,19 @@ const THUBApp = () => {
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                   className="border rounded-2xl p-8"
                 >
-                  {/* Date inside card */}
-                  <div className="text-center mb-4">
-                    <span style={{ color: '#475569' }} className="text-sm">
-                      {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-center gap-8">
-                    <SyringeMain units={todayDose} />
+                  <div className="flex items-start justify-center gap-8">
+                    <div>
+                      {/* Date above syringe, aligned with THUB */}
+                      <div className="text-center mb-2">
+                        <span style={{ color: '#64748b' }} className="text-sm">
+                          {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
+                        </span>
+                      </div>
+                      <SyringeMain units={todayDose} />
+                    </div>
                     
                     <div className="text-center">
-                      <p style={{ color: '#64748b' }} className="text-sm mb-1">Дръпни до</p>
+                      <p style={{ color: '#64748b' }} className="text-base mb-1">Дръпни до</p>
                       <p 
                         style={{ color: todayCompleted ? '#34d399' : '#22d3ee' }} 
                         className="text-6xl font-bold"
