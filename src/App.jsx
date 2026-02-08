@@ -2237,13 +2237,13 @@ const THUBApp = () => {
               <div className="flex items-center gap-2">
                 {!pulseOpen && todayPulse.erection && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', fontWeight: 600 }} className="text-xs">
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
                     {todayPulse.erection === 'yes' ? 'Да' : todayPulse.erection === 'weak' ? 'Слаба' : 'Не'}
                   </span>
                 )}
                 {!pulseOpen && todayPulse.wakeup && (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', fontWeight: 600 }} className="text-xs">
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
                     {todayPulse.wakeup === 'fresh' ? 'Свеж' : todayPulse.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
                   </span>
                 )}
@@ -2297,6 +2297,16 @@ const THUBApp = () => {
                     </button>
                   ))}
                 </div>
+
+                {todayPulse.erection && todayPulse.wakeup && (
+                  <button
+                    onClick={() => setPulseOpen(false)}
+                    style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
+                    className="w-full border rounded-xl py-2.5 mt-3 text-white text-sm font-semibold"
+                  >
+                    Готово ✓
+                  </button>
+                )}
               </div>
             )}
 
