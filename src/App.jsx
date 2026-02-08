@@ -2213,8 +2213,8 @@ const THUBApp = () => {
             className="absolute bottom-0 left-0 right-0 transition-all duration-500 rounded-b-lg"
           />
         </div>
-        <div style={{ color: '#64748b' }} className="text-center text-xs mt-2">
-          {actualMl.toFixed(2)} mL
+        <div style={{ color: '#475569' }} className="text-center text-sm mt-2">
+          {proto.graduation}U = {(proto.graduation * compound.concentration / 100).toFixed(1)} {compound.unit}
         </div>
       </div>
     );
@@ -2222,6 +2222,9 @@ const THUBApp = () => {
 
   return (
     <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }} className="pb-24">
+
+      {/* Pulse animation */}
+      <style>{`@keyframes pulseBorder { 0% { border-color: #1e3a5f; } 50% { border-color: #0891b2; } 100% { border-color: #1e3a5f; } }`}</style>
 
       {/* Content */}
       <main className="p-4 pt-6">
@@ -2237,6 +2240,7 @@ const THUBApp = () => {
                 backgroundColor: '#0f172a',
                 borderColor: '#1e3a5f',
                 borderRadius: pulseOpen ? '16px 16px 0 0' : '16px',
+                animation: (!todayPulse.erection && !todayPulse.wakeup && !pulseOpen) ? 'pulseBorder 2s ease-in-out infinite' : 'none',
               }}
               className="w-full border px-4 py-3 flex items-center justify-between"
             >
@@ -2317,18 +2321,18 @@ const THUBApp = () => {
 
             {todayIsInjectionDay ? (
               <>
-                {/* Date */}
-                <div className="text-center pb-1">
-                  <span style={{ color: '#475569' }} className="text-sm font-medium">
-                    {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
-                  </span>
-                </div>
-
                 {/* Hero Card - Syringe + Dose */}
                 <div 
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                   className="border rounded-2xl p-8"
                 >
+                  {/* Date inside card */}
+                  <div className="text-center mb-4">
+                    <span style={{ color: '#475569' }} className="text-sm">
+                      {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+
                   <div className="flex items-center justify-center gap-8">
                     <SyringeMain units={todayDose} />
                     
