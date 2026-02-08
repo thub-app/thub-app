@@ -212,17 +212,24 @@ const THUBApp = () => {
 
   const setPulseAnswer = (field, value) => {
     const key = getTodayJournalKey();
+    const newValue = journalEntries[key]?.morning_pulse?.[field] === value ? null : value;
+    const updated = {
+      ...journalEntries[key]?.morning_pulse,
+      [field]: newValue,
+      timestamp: new Date().toISOString()
+    };
     setJournalEntries(prev => ({
       ...prev,
       [key]: {
         ...prev[key],
-        morning_pulse: {
-          ...prev[key]?.morning_pulse,
-          [field]: prev[key]?.morning_pulse?.[field] === value ? null : value,
-          timestamp: new Date().toISOString()
-        }
+        morning_pulse: updated
       }
     }));
+    // Auto-close when both answered
+    const otherField = field === 'erection' ? 'wakeup' : 'erection';
+    if (newValue && updated[otherField]) {
+      setPulseOpen(false);
+    }
   };
 
   // Save journal when changed
@@ -2236,14 +2243,22 @@ const THUBApp = () => {
               <span style={{ color: '#94a3b8' }} className="text-sm font-medium">Сутрешен пулс</span>
               <div className="flex items-center gap-2">
                 {!pulseOpen && todayPulse.erection && (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', fontWeight: 600 }} className="text-xs">
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
+                  <span style={{ 
+                    backgroundColor: `${todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626'}20`,
+                    border: `1px solid ${todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626'}`,
+                    color: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626',
+                    padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 
+                  }}>
                     {todayPulse.erection === 'yes' ? 'Да' : todayPulse.erection === 'weak' ? 'Слаба' : 'Не'}
                   </span>
                 )}
                 {!pulseOpen && todayPulse.wakeup && (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', fontWeight: 600 }} className="text-xs">
-                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
+                  <span style={{ 
+                    backgroundColor: `${todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626'}20`,
+                    border: `1px solid ${todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626'}`,
+                    color: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626',
+                    padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 
+                  }}>
                     {todayPulse.wakeup === 'fresh' ? 'Свеж' : todayPulse.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
                   </span>
                 )}
@@ -2297,16 +2312,6 @@ const THUBApp = () => {
                     </button>
                   ))}
                 </div>
-
-                {todayPulse.erection && todayPulse.wakeup && (
-                  <button
-                    onClick={() => setPulseOpen(false)}
-                    style={{ backgroundColor: '#0891b2', borderColor: '#0891b2' }}
-                    className="w-full border rounded-xl py-2.5 mt-3 text-white text-sm font-semibold"
-                  >
-                    Готово ✓
-                  </button>
-                )}
               </div>
             )}
 
