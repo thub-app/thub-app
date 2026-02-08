@@ -198,6 +198,42 @@ const THUBApp = () => {
   const [logNote, setLogNote] = useState('');
   const [logMissReason, setLogMissReason] = useState('');
   const [autoMissRan, setAutoMissRan] = useState(false);
+
+  // ============ JOURNAL (Morning Pulse) ============
+  const [journalEntries, setJournalEntries] = useState(() => loadFromStorage('thub-journal', {}));
+  const [showMorningPulse, setShowMorningPulse] = useState(true);
+
+  // Save journal when changed
+  useEffect(() => {
+    saveToStorage('thub-journal', journalEntries);
+  }, [journalEntries]);
+
+  // Check if morning pulse is done for today
+  const getTodayJournalKey = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  };
+
+  const todayPulse = journalEntries[getTodayJournalKey()]?.morning_pulse;
+  const pulseCompleted = todayPulse && (todayPulse.erection || todayPulse.wakeup || todayPulse.skipped);
+
+  const saveMorningPulse = (erection, wakeup, skipped = false) => {
+    const key = getTodayJournalKey();
+    setJournalEntries(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        morning_pulse: {
+          erection: erection || null,
+          wakeup: wakeup || null,
+          skipped,
+          timestamp: new Date().toISOString()
+        }
+      }
+    }));
+    setShowMorningPulse(false);
+  };
+
   // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
@@ -2184,6 +2220,120 @@ const THUBApp = () => {
         {activeTab === 'today' && (
           <div className="space-y-4">
 
+            {/* MORNING PULSE - мека блокада преди дозата */}
+            {!pulseCompleted && showMorningPulse && (
+              <div 
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                className="border rounded-2xl p-5"
+              >
+                <p style={{ color: '#64748b' }} className="text-xs text-center mb-4">
+                  Сутрешен пулс
+                </p>
+
+                {/* Q1: Сутрешна ерекция */}
+                <div className="mb-4">
+                  <p className="text-white text-sm font-medium mb-2 text-center">Сутрешна ерекция?</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'yes', label: 'Да', color: '#059669' },
+                      { id: 'weak', label: 'Слаба', color: '#d97706' },
+                      { id: 'no', label: 'Не', color: '#dc2626' },
+                    ].map(opt => {
+                      const selected = todayPulse?.erection === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => {
+                            const key = getTodayJournalKey();
+                            const currentWakeup = journalEntries[key]?.morning_pulse?.wakeup;
+                            if (currentWakeup) {
+                              saveMorningPulse(opt.id, currentWakeup);
+                            } else {
+                              setJournalEntries(prev => ({
+                                ...prev,
+                                [key]: {
+                                  ...prev[key],
+                                  morning_pulse: {
+                                    ...prev[key]?.morning_pulse,
+                                    erection: opt.id,
+                                    timestamp: new Date().toISOString()
+                                  }
+                                }
+                              }));
+                            }
+                          }}
+                          style={{
+                            backgroundColor: selected ? `${opt.color}22` : '#0a1628',
+                            borderColor: selected ? opt.color : '#1e3a5f',
+                          }}
+                          className="py-3 border rounded-xl text-white text-sm font-medium transition-all"
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Q2: Как се събуди */}
+                <div className="mb-4">
+                  <p className="text-white text-sm font-medium mb-2 text-center">Как се събуди?</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'fresh', label: 'Свеж', color: '#059669' },
+                      { id: 'normal', label: 'Нормално', color: '#d97706' },
+                      { id: 'heavy', label: 'Тежко', color: '#dc2626' },
+                    ].map(opt => {
+                      const selected = todayPulse?.wakeup === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => {
+                            const key = getTodayJournalKey();
+                            const currentErection = journalEntries[key]?.morning_pulse?.erection;
+                            if (currentErection) {
+                              saveMorningPulse(currentErection, opt.id);
+                            } else {
+                              setJournalEntries(prev => ({
+                                ...prev,
+                                [key]: {
+                                  ...prev[key],
+                                  morning_pulse: {
+                                    ...prev[key]?.morning_pulse,
+                                    wakeup: opt.id,
+                                    timestamp: new Date().toISOString()
+                                  }
+                                }
+                              }));
+                            }
+                          }}
+                          style={{
+                            backgroundColor: selected ? `${opt.color}22` : '#0a1628',
+                            borderColor: selected ? opt.color : '#1e3a5f',
+                          }}
+                          className="py-3 border rounded-xl text-white text-sm font-medium transition-all"
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Skip */}
+                <button
+                  onClick={() => saveMorningPulse(null, null, true)}
+                  style={{ color: '#475569' }}
+                  className="w-full py-2 text-xs hover:text-slate-400 transition-colors"
+                >
+                  Пропусни →
+                </button>
+              </div>
+            )}
+
+            {/* Основно съдържание — след пулса */}
+            {(pulseCompleted || !showMorningPulse) && (
+            <>
             {todayIsInjectionDay ? (
               <>
                 {/* Date */}
@@ -2467,6 +2617,8 @@ const THUBApp = () => {
                 <p className="text-white text-2xl font-bold">Почивен ден</p>
                 <p style={{ color: '#64748b' }} className="mt-2">Следваща инжекция скоро</p>
               </div>
+            )}
+            </>
             )}
           </div>
         )}
