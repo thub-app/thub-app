@@ -217,6 +217,34 @@ export const dbLoadProtocol = async (userId) => {
   };
 };
 
+// Зарежда ВСИЧКИ протоколи (активни и неактивни) за protocolVersions
+export const dbLoadAllProtocols = async (userId) => {
+  const { data, error } = await supabase
+    .from('protocols')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) return [];
+
+  return data.map(p => ({
+    compound: p.compound,
+    weeklyDose: Number(p.weekly_dose),
+    frequency: p.frequency,
+    graduation: p.graduation,
+    startDate: p.start_date,
+    source: p.source || 'unknown',
+    oilType: p.oil_type || 'unknown',
+    injectionMethod: p.injection_method || 'im',
+    injectionLocation: p.injection_location || 'glute',
+    showNowIndicator: p.show_now_indicator !== false,
+    effectiveFrom: p.effective_from || p.start_date,
+    note: p.note,
+    createdAt: p.created_at,
+    _dbId: p.id
+  }));
+};
+
 // Записва нов протокол (деактивира стария автоматично)
 export const dbSaveProtocol = async (userId, protocolData) => {
   // Стъпка 1: Деактивираме стария протокол
