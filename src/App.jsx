@@ -1,4 +1,3 @@
-
 import { useState, useEffect, Component } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -200,43 +199,44 @@ const THUBApp = () => {
   const [logMissReason, setLogMissReason] = useState('');
   const [autoMissRan, setAutoMissRan] = useState(false);
 
-  // ============ JOURNAL (Morning Pulse) ============
+  // === JOURNAL: Morning Pulse ===
   const [journalEntries, setJournalEntries] = useState(() => loadFromStorage('thub-journal', {}));
-  const [showMorningPulse, setShowMorningPulse] = useState(true);
-  const [pulseEditMode, setPulseEditMode] = useState(false);
+  const [pulseOpen, setPulseOpen] = useState(false);
 
-  // Save journal when changed
-  useEffect(() => {
-    saveToStorage('thub-journal', journalEntries);
-  }, [journalEntries]);
-
-  // Check if morning pulse is done for today
   const getTodayJournalKey = () => {
     const d = new Date();
     return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   };
 
-  const todayPulse = journalEntries[getTodayJournalKey()]?.morning_pulse;
-  const pulseCompleted = todayPulse && ((todayPulse.erection && todayPulse.wakeup) || todayPulse.skipped);
+  const todayPulse = journalEntries[getTodayJournalKey()]?.morning_pulse || {};
 
-  const saveMorningPulse = (erection, wakeup, skipped = false) => {
+  const setPulseAnswer = (field, value) => {
     const key = getTodayJournalKey();
     setJournalEntries(prev => ({
       ...prev,
       [key]: {
         ...prev[key],
         morning_pulse: {
-          erection: erection || null,
-          wakeup: wakeup || null,
-          skipped,
+          ...prev[key]?.morning_pulse,
+          [field]: prev[key]?.morning_pulse?.[field] === value ? null : value,
           timestamp: new Date().toISOString()
         }
       }
     }));
-    setShowMorningPulse(false);
-    setPulseEditMode(false);
   };
 
+  // Save journal when changed
+  useEffect(() => {
+    saveToStorage('thub-journal', journalEntries);
+  }, [journalEntries]);
+
+  // Open pulse automatically if no answers yet today
+  useEffect(() => {
+    const pulse = journalEntries[getTodayJournalKey()]?.morning_pulse;
+    if (!pulse || (!pulse.erection && !pulse.wakeup)) {
+      setPulseOpen(true);
+    }
+  }, []);
   // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
@@ -2223,148 +2223,83 @@ const THUBApp = () => {
         {activeTab === 'today' && (
           <div className="space-y-4">
 
-            {/* MORNING PULSE - мека блокада преди дозата */}
-            {(!pulseCompleted || pulseEditMode) && showMorningPulse && (
-              <div 
-                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                className="border rounded-2xl p-5"
+            {/* === MORNING PULSE TOGGLE === */}
+            <button
+              onClick={() => setPulseOpen(!pulseOpen)}
+              style={{
+                backgroundColor: '#0f172a',
+                borderColor: '#1e3a5f',
+                borderRadius: pulseOpen ? '16px 16px 0 0' : '16px',
+              }}
+              className="w-full border px-4 py-3 flex items-center justify-between"
+            >
+              <span style={{ color: '#94a3b8' }} className="text-sm font-medium">Сутрешен пулс</span>
+              <div className="flex items-center gap-2">
+                {!pulseOpen && todayPulse.erection && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', fontWeight: 600 }} className="text-xs">
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
+                    {todayPulse.erection === 'yes' ? 'Да' : todayPulse.erection === 'weak' ? 'Слаба' : 'Не'}
+                  </span>
+                )}
+                {!pulseOpen && todayPulse.wakeup && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', fontWeight: 600 }} className="text-xs">
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626', display: 'inline-block' }}></span>
+                    {todayPulse.wakeup === 'fresh' ? 'Свеж' : todayPulse.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
+                  </span>
+                )}
+                <span style={{ color: '#475569', transform: pulseOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="text-sm">▼</span>
+              </div>
+            </button>
+
+            {pulseOpen && (
+              <div
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f', borderTop: 'none', borderRadius: '0 0 16px 16px', marginTop: 0 }}
+                className="border px-4 py-4 -mt-4"
               >
-                <p style={{ color: '#64748b' }} className="text-xs text-center mb-4">
-                  Сутрешен пулс
-                </p>
-
-                {/* Q1: Сутрешна ерекция */}
-                <div className="mb-4">
-                  <p className="text-white text-sm font-medium mb-2 text-center">Сутрешна ерекция?</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'yes', label: 'Да', color: '#059669' },
-                      { id: 'weak', label: 'Слаба', color: '#d97706' },
-                      { id: 'no', label: 'Не', color: '#dc2626' },
-                    ].map(opt => {
-                      const selected = todayPulse?.erection === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => {
-                            const key = getTodayJournalKey();
-                            const currentWakeup = journalEntries[key]?.morning_pulse?.wakeup;
-                            if (currentWakeup) {
-                              saveMorningPulse(opt.id, currentWakeup);
-                            } else {
-                              setJournalEntries(prev => ({
-                                ...prev,
-                                [key]: {
-                                  ...prev[key],
-                                  morning_pulse: {
-                                    ...prev[key]?.morning_pulse,
-                                    erection: opt.id,
-                                    timestamp: new Date().toISOString()
-                                  }
-                                }
-                              }));
-                            }
-                          }}
-                          style={{
-                            backgroundColor: selected ? `${opt.color}22` : '#0a1628',
-                            borderColor: selected ? opt.color : '#1e3a5f',
-                          }}
-                          className="py-3 border rounded-xl text-white text-sm font-medium transition-all"
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <p className="text-white text-sm font-medium mb-2 text-center">Сутрешна ерекция?</p>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {[
+                    { id: 'yes', label: 'Да', color: '#059669' },
+                    { id: 'weak', label: 'Слаба', color: '#d97706' },
+                    { id: 'no', label: 'Не', color: '#dc2626' },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setPulseAnswer('erection', opt.id)}
+                      style={{
+                        backgroundColor: todayPulse.erection === opt.id ? opt.color : '#0a1628',
+                        borderColor: todayPulse.erection === opt.id ? opt.color : '#1e3a5f',
+                      }}
+                      className="border-2 rounded-xl py-3 text-white text-sm font-semibold"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Q2: Как се събуди */}
-                <div className="mb-4">
-                  <p className="text-white text-sm font-medium mb-2 text-center">Как се събуди?</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: 'fresh', label: 'Свеж', color: '#059669' },
-                      { id: 'normal', label: 'Нормално', color: '#d97706' },
-                      { id: 'heavy', label: 'Тежко', color: '#dc2626' },
-                    ].map(opt => {
-                      const selected = todayPulse?.wakeup === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          onClick={() => {
-                            const key = getTodayJournalKey();
-                            const currentErection = journalEntries[key]?.morning_pulse?.erection;
-                            if (currentErection) {
-                              saveMorningPulse(currentErection, opt.id);
-                            } else {
-                              setJournalEntries(prev => ({
-                                ...prev,
-                                [key]: {
-                                  ...prev[key],
-                                  morning_pulse: {
-                                    ...prev[key]?.morning_pulse,
-                                    wakeup: opt.id,
-                                    timestamp: new Date().toISOString()
-                                  }
-                                }
-                              }));
-                            }
-                          }}
-                          style={{
-                            backgroundColor: selected ? `${opt.color}22` : '#0a1628',
-                            borderColor: selected ? opt.color : '#1e3a5f',
-                          }}
-                          className="py-3 border rounded-xl text-white text-sm font-medium transition-all"
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <p className="text-white text-sm font-medium mb-2 text-center">Как се събуди?</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'fresh', label: 'Свеж', color: '#059669' },
+                    { id: 'normal', label: 'Нормално', color: '#d97706' },
+                    { id: 'heavy', label: 'Тежко', color: '#dc2626' },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setPulseAnswer('wakeup', opt.id)}
+                      style={{
+                        backgroundColor: todayPulse.wakeup === opt.id ? opt.color : '#0a1628',
+                        borderColor: todayPulse.wakeup === opt.id ? opt.color : '#1e3a5f',
+                      }}
+                      className="border-2 rounded-xl py-3 text-white text-sm font-semibold"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-
-                {/* Skip */}
-                <button
-                  onClick={() => saveMorningPulse(null, null, true)}
-                  style={{ color: '#475569' }}
-                  className="w-full py-2 text-xs hover:text-slate-400 transition-colors"
-                >
-                  Пропусни →
-                </button>
               </div>
             )}
 
-            {/* Основно съдържание — след пулса */}
-            {((pulseCompleted && !pulseEditMode) || !showMorningPulse) && (
-            <>
-            {/* Pulse summary — тап за редакция */}
-            {pulseCompleted && !todayPulse?.skipped && (
-              <button
-                onClick={() => {
-                  setPulseEditMode(true);
-                  setShowMorningPulse(true);
-                }}
-                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                className="w-full border rounded-2xl px-4 py-2.5 flex items-center justify-between"
-              >
-                <span style={{ color: '#475569' }} className="text-xs">Сутрешен пулс</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs">
-                    {todayPulse?.erection === 'yes' ? '🟢' : todayPulse?.erection === 'weak' ? '🟡' : '🔴'}
-                    <span style={{ color: '#94a3b8' }} className="ml-1">
-                      {todayPulse?.erection === 'yes' ? 'Да' : todayPulse?.erection === 'weak' ? 'Слаба' : 'Не'}
-                    </span>
-                  </span>
-                  <span className="text-xs">
-                    {todayPulse?.wakeup === 'fresh' ? '🟢' : todayPulse?.wakeup === 'normal' ? '🟡' : '🔴'}
-                    <span style={{ color: '#94a3b8' }} className="ml-1">
-                      {todayPulse?.wakeup === 'fresh' ? 'Свеж' : todayPulse?.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
-                    </span>
-                  </span>
-                  <span style={{ color: '#475569' }} className="text-xs">✏️</span>
-                </div>
-              </button>
-            )}
             {todayIsInjectionDay ? (
               <>
                 {/* Date */}
@@ -2648,8 +2583,6 @@ const THUBApp = () => {
                 <p className="text-white text-2xl font-bold">Почивен ден</p>
                 <p style={{ color: '#64748b' }} className="mt-2">Следваща инжекция скоро</p>
               </div>
-            )}
-            </>
             )}
           </div>
         )}
