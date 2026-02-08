@@ -202,6 +202,7 @@ const THUBApp = () => {
   // ============ JOURNAL (Morning Pulse) ============
   const [journalEntries, setJournalEntries] = useState(() => loadFromStorage('thub-journal', {}));
   const [showMorningPulse, setShowMorningPulse] = useState(true);
+  const [pulseEditMode, setPulseEditMode] = useState(false);
 
   // Save journal when changed
   useEffect(() => {
@@ -215,7 +216,7 @@ const THUBApp = () => {
   };
 
   const todayPulse = journalEntries[getTodayJournalKey()]?.morning_pulse;
-  const pulseCompleted = todayPulse && (todayPulse.erection || todayPulse.wakeup || todayPulse.skipped);
+  const pulseCompleted = todayPulse && ((todayPulse.erection && todayPulse.wakeup) || todayPulse.skipped);
 
   const saveMorningPulse = (erection, wakeup, skipped = false) => {
     const key = getTodayJournalKey();
@@ -232,6 +233,7 @@ const THUBApp = () => {
       }
     }));
     setShowMorningPulse(false);
+    setPulseEditMode(false);
   };
 
   // Save injections when changed
@@ -2221,7 +2223,7 @@ const THUBApp = () => {
           <div className="space-y-4">
 
             {/* MORNING PULSE - мека блокада преди дозата */}
-            {!pulseCompleted && showMorningPulse && (
+            {(!pulseCompleted || pulseEditMode) && showMorningPulse && (
               <div 
                 style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                 className="border rounded-2xl p-5"
@@ -2332,8 +2334,36 @@ const THUBApp = () => {
             )}
 
             {/* Основно съдържание — след пулса */}
-            {(pulseCompleted || !showMorningPulse) && (
+            {((pulseCompleted && !pulseEditMode) || !showMorningPulse) && (
             <>
+            {/* Pulse summary — тап за редакция */}
+            {pulseCompleted && !todayPulse?.skipped && (
+              <button
+                onClick={() => {
+                  setPulseEditMode(true);
+                  setShowMorningPulse(true);
+                }}
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
+                className="w-full border rounded-2xl px-4 py-2.5 flex items-center justify-between"
+              >
+                <span style={{ color: '#475569' }} className="text-xs">Сутрешен пулс</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs">
+                    {todayPulse?.erection === 'yes' ? '🟢' : todayPulse?.erection === 'weak' ? '🟡' : '🔴'}
+                    <span style={{ color: '#94a3b8' }} className="ml-1">
+                      {todayPulse?.erection === 'yes' ? 'Да' : todayPulse?.erection === 'weak' ? 'Слаба' : 'Не'}
+                    </span>
+                  </span>
+                  <span className="text-xs">
+                    {todayPulse?.wakeup === 'fresh' ? '🟢' : todayPulse?.wakeup === 'normal' ? '🟡' : '🔴'}
+                    <span style={{ color: '#94a3b8' }} className="ml-1">
+                      {todayPulse?.wakeup === 'fresh' ? 'Свеж' : todayPulse?.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
+                    </span>
+                  </span>
+                  <span style={{ color: '#475569' }} className="text-xs">✏️</span>
+                </div>
+              </button>
+            )}
             {todayIsInjectionDay ? (
               <>
                 {/* Date */}
