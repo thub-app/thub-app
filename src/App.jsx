@@ -29,6 +29,7 @@ import {
     dbSaveProfile,
     dbLoadProtocol,
     dbSaveProtocol,
+    dbLoadAllProtocols,
     dbLoadInjections,
     dbSaveInjection,
     dbDeleteInjection,
@@ -78,6 +79,7 @@ const THUBApp = () => {
 
   // ============ SUPABASE AUTH STATE ============
   const [userId, setUserId] = useState(null);
+  const [protocolDbId, setProtocolDbId] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -199,6 +201,17 @@ const THUBApp = () => {
   // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
+    // Supabase sync
+    if (userId && Object.keys(injections).length > 0) {
+      const syncToSupabase = async () => {
+        for (const [dateKey, data] of Object.entries(injections)) {
+          if (data) {
+            await dbSaveInjection(userId, protocolDbId, dateKey, data);
+          }
+        }
+      };
+      syncToSupabase().catch(console.error);
+    }
   }, [injections]);
 
   // Auto-miss on load: mark past unlogged injection days as MISSED
@@ -274,6 +287,7 @@ const THUBApp = () => {
           setUserId(session.user.id);
           const dbProfile = await dbLoadProfile(session.user.id);
           const dbProtocol = await dbLoadProtocol(session.user.id);
+          const dbAllProtocols = await dbLoadAllProtocols(session.user.id);
           const dbInj = await dbLoadInjections(session.user.id);
           
           if (dbProfile) {
@@ -286,7 +300,9 @@ const THUBApp = () => {
             if (dbProtocol) {
               loadedProfile.protocol = dbProtocol;
               loadedProfile.protocolConfigured = true;
+              loadedProfile.protocolVersions = dbAllProtocols;
               setProtocolData(dbProtocol);
+              if (dbProtocol._dbId) setProtocolDbId(dbProtocol._dbId);
             }
             
             if (dbInj && Object.keys(dbInj).length > 0) {
@@ -535,6 +551,7 @@ const THUBApp = () => {
           setUserId(data.user.id);
           const dbProfile = await dbLoadProfile(data.user.id);
           const dbProtocol = await dbLoadProtocol(data.user.id);
+          const dbAllProtocols = await dbLoadAllProtocols(data.user.id);
           const dbInj = await dbLoadInjections(data.user.id);
           
           const loadedProfile = {
@@ -546,7 +563,9 @@ const THUBApp = () => {
           if (dbProtocol) {
             loadedProfile.protocol = dbProtocol;
             loadedProfile.protocolConfigured = true;
+            loadedProfile.protocolVersions = dbAllProtocols;
             setProtocolData(dbProtocol);
+            if (dbProtocol._dbId) setProtocolDbId(dbProtocol._dbId);
           }
           
           if (dbInj && Object.keys(dbInj).length > 0) {
@@ -693,8 +712,9 @@ const THUBApp = () => {
     // === SUPABASE SYNC ===
     if (userId) {
       await dbSaveProfile(userId, { name: newProfile.name, email: newProfile.email, protocolConfigured: true });
-      const protocolToSave = { ...protocolData, effectiveFrom: protocolData.effectiveFrom || protocolData.startDate, note: reason };
+      const protocolToSave = { ...protocolData, effectiveFrom: reason ? getEffectiveDate() : protocolData.startDate, note: reason };
       const { data: savedProto } = await dbSaveProtocol(userId, protocolToSave);
+      if (savedProto) setProtocolDbId(savedProto.id);
       
       if (reason && profile.protocol && savedProto) {
         const changesStr = detectedChanges.map(c => `${c.field}: ${c.from} -> ${c.to}`).join(', ');
