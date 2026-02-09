@@ -390,6 +390,25 @@ export const dbDeleteInjection = async (userId, dateKey) => {
 // SUPABASE — ИСТОРИЯ НА ПРОТОКОЛИ (ново)
 // ================================================================
 
+// Зарежда историята на промените от базата данни
+export const dbLoadProtocolHistory = async (userId) => {
+  const { data, error } = await supabase
+    .from('protocol_history')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+  return data.map(h => ({
+    date: h.created_at,
+    reason: h.reason,
+    changes: h.changes,
+    oldProtocol: h.old_data,
+    newProtocol: h.new_data,
+    effectiveFrom: h.new_data?.effectiveFrom,
+    effectiveMethod: null
+  }));
+};
+
 export const dbSaveProtocolHistory = async (userId, protocolId, changes, reason, oldData, newData) => {
   const { error } = await supabase
     .from('protocol_history')
