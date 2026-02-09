@@ -56,7 +56,7 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div style={{ backgroundColor: '#0a1628', color: '#f87171', minHeight: '100vh', padding: '2rem' }}>
-          <h2 style={{ color: '#fbbf24', fontSize: '1.5rem', marginBottom: '1rem' }}>âš ï¸ THUB Error</h2>
+          <h2 style={{ color: '#fbbf24', fontSize: '1.5rem', marginBottom: '1rem' }}>⚠️ THUB Error</h2>
           <pre style={{ color: '#94a3b8', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
             {this.state.error?.message}
             {'\n\n'}
@@ -128,7 +128,7 @@ const THUBApp = () => {
 
   const [injections, setInjections] = useState(() => loadFromStorage('thub-injections', {}));
 
-  // Location state - Ð¿Ð¾Ð¼Ð½Ð¸ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½Ð°Ñ‚Ð° Ð¸Ð·Ð¿Ð¾Ð»Ð·Ð²Ð°Ð½Ð° Ð»Ð¾ÐºÐ°Ñ†Ð¸Ñ Ð¸ ÑÑ‚Ñ€Ð°Ð½Ð°
+  // Location state - помни последната използвана локация и страна
   const [selectedLocation, setSelectedLocation] = useState(() => {
     const saved = loadFromStorage('thub-injections', {});
     const keys = Object.keys(saved).sort().reverse();
@@ -153,8 +153,8 @@ const THUBApp = () => {
 
   const [formData, setFormData] = useState(() => {
     const saved = migrateProfile(loadFromStorage('thub-profile', null));
-    // Ð—Ð° Sign In - Ð¿Ð¾Ð»ÐµÑ‚Ð°Ñ‚Ð° Ð·Ð°Ð¿Ð¾Ñ‡Ð²Ð°Ñ‚ Ð¿Ñ€Ð°Ð·Ð½Ð¸, Ð±Ñ€Ð°ÑƒÐ·ÑŠÑ€ÑŠÑ‚ Ð¿Ñ€Ð°Ð²Ð¸ autocomplete
-    // Ð—Ð° Sign Up - ÑÑŠÑ‰Ð¾ Ð¿Ñ€Ð°Ð·Ð½Ð¸
+    // За Sign In - полетата започват празни, браузърът прави autocomplete
+    // За Sign Up - също празни
     // Запомни ме — четем запазен имейл
     const rememberedEmail = localStorage.getItem('thub-remembered-email') || '';
     return {
@@ -183,7 +183,7 @@ const THUBApp = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Modal state Ð·Ð° Ð¿Ð¾Ñ‚Ð²ÑŠÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ Ð½Ð° Ð¿Ñ€Ð¾Ð¼ÐµÐ½Ð¸
+  // Modal state за потвърждение на промени
   const [showChangeModal, setShowChangeModal] = useState(false);
   const [detectedChanges, setDetectedChanges] = useState([]);
   const [changeReason, setChangeReason] = useState('');
@@ -401,7 +401,7 @@ const THUBApp = () => {
     
     if (oldProto.compound !== newProto.compound) {
       changes.push({
-        field: 'ÐŸÑ€ÐµÐ¿Ð°Ñ€Ð°Ñ‚',
+        field: 'Препарат',
         from: compoundNames[oldProto.compound] || oldProto.compound,
         to: compoundNames[newProto.compound] || newProto.compound
       });
@@ -409,7 +409,7 @@ const THUBApp = () => {
     
     if (oldProto.weeklyDose !== newProto.weeklyDose) {
       changes.push({
-        field: 'Ð¡ÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð° Ð´Ð¾Ð·Ð°',
+        field: 'Седмична доза',
         from: `${oldProto.weeklyDose} mg`,
         to: `${newProto.weeklyDose} mg`
       });
@@ -417,7 +417,7 @@ const THUBApp = () => {
     
     if (oldProto.frequency !== newProto.frequency) {
       changes.push({
-        field: 'Ð§ÐµÑÑ‚Ð¾Ñ‚Ð°',
+        field: 'Честота',
         from: frequencyNames[oldProto.frequency] || oldProto.frequency,
         to: frequencyNames[newProto.frequency] || newProto.frequency
       });
@@ -425,7 +425,7 @@ const THUBApp = () => {
     
     if (oldProto.graduation !== newProto.graduation) {
       changes.push({
-        field: 'Ð¡ÐºÐ°Ð»Ð°',
+        field: 'Скала',
         from: `${oldProto.graduation}U`,
         to: `${newProto.graduation}U`
       });
@@ -433,25 +433,25 @@ const THUBApp = () => {
     
     if (oldProto.startDate !== newProto.startDate) {
       changes.push({
-        field: 'ÐÐ°Ñ‡Ð°Ð»Ð½Ð° Ð´Ð°Ñ‚Ð°',
+        field: 'Начална дата',
         from: oldProto.startDate,
         to: newProto.startDate
       });
     }
 
     if (oldProto.source !== newProto.source) {
-      const sourceLabels = { pharmacy: 'ÐÐ¿Ñ‚ÐµÐºÐ°', ugl: 'UGL', unknown: 'ÐÐµ Ð·Ð½Ð°Ð¼' };
+      const sourceLabels = { pharmacy: 'Аптека', ugl: 'UGL', unknown: 'Не знам' };
       changes.push({
-        field: 'Ð˜Ð·Ñ‚Ð¾Ñ‡Ð½Ð¸Ðº',
+        field: 'Източник',
         from: sourceLabels[oldProto.source] || oldProto.source,
         to: sourceLabels[newProto.source] || newProto.source
       });
     }
 
     if (oldProto.oilType !== newProto.oilType) {
-      const oilLabels = { mct: 'MCT', grape_seed: 'Grape Seed', sesame: 'Sesame', castor: 'Castor', other: 'Ð”Ñ€ÑƒÐ³Ð¾', unknown: 'ÐÐµ Ð·Ð½Ð°Ð¼' };
+      const oilLabels = { mct: 'MCT', grape_seed: 'Grape Seed', sesame: 'Sesame', castor: 'Castor', other: 'Друго', unknown: 'Не знам' };
       changes.push({
-        field: 'ÐœÐ°ÑÐ»Ð¾',
+        field: 'Масло',
         from: oilLabels[oldProto.oilType] || oldProto.oilType,
         to: oilLabels[newProto.oilType] || newProto.oilType
       });
@@ -460,7 +460,7 @@ const THUBApp = () => {
     if (oldProto.injectionMethod !== newProto.injectionMethod) {
       const methodLabels = { im: 'IM', subq: 'SubQ' };
       changes.push({
-        field: 'ÐœÐµÑ‚Ð¾Ð´',
+        field: 'Метод',
         from: methodLabels[oldProto.injectionMethod] || oldProto.injectionMethod,
         to: methodLabels[newProto.injectionMethod] || newProto.injectionMethod
       });
@@ -479,19 +479,19 @@ const THUBApp = () => {
     
     if (authMode === 'signup') {
       if (formData.name.trim().length < 2) {
-        newErrors.name = 'ÐœÐ¸Ð½Ð¸Ð¼ÑƒÐ¼ 2 ÑÐ¸Ð¼Ð²Ð¾Ð»Ð°';
+        newErrors.name = 'Минимум 2 символа';
       }
       if (formData.password && formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = 'ÐŸÐ°Ñ€Ð¾Ð»Ð¸Ñ‚Ðµ Ð½Ðµ ÑÑŠÐ²Ð¿Ð°Ð´Ð°Ñ‚';
+        newErrors.confirmPassword = 'Паролите не съвпадат';
       }
     }
     
     if (!validateEmail(formData.email)) {
-      newErrors.email = 'ÐÐµÐ²Ð°Ð»Ð¸Ð´ÐµÐ½ Ð¸Ð¼ÐµÐ¹Ð»';
+      newErrors.email = 'Невалиден имейл';
     }
     
     if (!formData.password || formData.password.length < 6) {
-      newErrors.password = 'ÐœÐ¸Ð½Ð¸Ð¼ÑƒÐ¼ 6 ÑÐ¸Ð¼Ð²Ð¾Ð»Ð°';
+      newErrors.password = 'Минимум 6 символа';
     }
     
     setErrors(newErrors);
@@ -533,7 +533,7 @@ const THUBApp = () => {
       }
     };
     
-    // Ð“ÐµÐ½ÐµÑ€Ð¸Ñ€Ð°Ð¼Ðµ Ð½ÑÐºÐ¾Ð»ÐºÐ¾ Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ð¸ Ð·Ð° Ð¿Ð¾ÑÐ»ÐµÐ´Ð½Ð¸Ñ‚Ðµ 2 ÑÐµÐ´Ð¼Ð¸Ñ†Ð¸
+    // Генерираме няколко инжекции за последните 2 седмици
     const demoInjections = {};
     const startDate = new Date(demoProfile.protocol.startDate);
     for (let i = 0; i < 14; i += 2) {
@@ -655,7 +655,7 @@ const THUBApp = () => {
 
   const handleForgotPassword = async () => {
     if (!formData.email || !formData.email.includes('@')) {
-      setAuthError('Ð’ÑŠÐ²ÐµÐ´Ð¸ Ð¸Ð¼ÐµÐ¹Ð» Ð°Ð´Ñ€ÐµÑ');
+      setAuthError('Въведи имейл адрес');
       return;
     }
     const { error } = await authResetPassword(formData.email.trim());
@@ -669,12 +669,12 @@ const THUBApp = () => {
 
 
   const handleProtocolSubmit = () => {
-    // ÐÐºÐ¾ Ð²ÐµÑ‡Ðµ Ð¸Ð¼Ð° Ð·Ð°Ð¿Ð°Ð·ÐµÐ½ Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð», Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑÐ²Ð°Ð¼Ðµ Ð·Ð° Ð¿Ñ€Ð¾Ð¼ÐµÐ½Ð¸
+    // Ако вече има запазен протокол, проверяваме за промени
     if (profile.protocolConfigured && profile.protocol) {
       const changes = detectProtocolChanges(profile.protocol, protocolData);
       
       if (changes.length > 0) {
-        // Ð˜Ð¼Ð° Ð¿Ñ€Ð¾Ð¼ÐµÐ½Ð¸ - Ð¿Ð¾ÐºÐ°Ð·Ð²Ð°Ð¼Ðµ modal Ð·Ð° Ð¿Ð¾Ñ‚Ð²ÑŠÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ
+        // Има промени - показваме modal за потвърждение
         setDetectedChanges(changes);
         setChangeReason('');
         setEffectiveFromOption('next');
@@ -684,7 +684,7 @@ const THUBApp = () => {
       }
     }
     
-    // ÐÑÐ¼Ð° Ð¿Ñ€Ð¾Ð¼ÐµÐ½Ð¸ Ð¸Ð»Ð¸ Ðµ Ð½Ð¾Ð² Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð» - Ð·Ð°Ð¿Ð°Ð·Ð²Ð°Ð¼Ðµ Ð´Ð¸Ñ€ÐµÐºÑ‚Ð½Ð¾
+    // Няма промени или е нов протокол - запазваме директно
     saveProtocol();
   };
 
@@ -753,11 +753,11 @@ const THUBApp = () => {
       const historyEntry = {
         date: now,
         reason: reason,
-        changes: detectedChanges.map(c => `${c.field}: ${c.from} â†’ ${c.to}`).join(', '),
+        changes: detectedChanges.map(c => `${c.field}: ${c.from} → ${c.to}`).join(', '),
         oldProtocol: { ...profile.protocol },
         newProtocol: { ...protocolData },
         effectiveFrom: getEffectiveDate(),
-        effectiveMethod: effectiveFromOption === 'next' ? 'Ð¡Ð»ÐµÐ´Ð²Ð°Ñ‰Ð° Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ' : 'Ð˜Ð·Ð±Ñ€Ð°Ð½Ð° Ð´Ð°Ñ‚Ð°'
+        effectiveMethod: effectiveFromOption === 'next' ? 'Следваща инжекция' : 'Избрана дата'
       };
       newHistory = [...newHistory, historyEntry];
     }
@@ -795,7 +795,7 @@ const THUBApp = () => {
 
 
   const cancelProtocolChange = () => {
-    // Ð’Ñ€ÑŠÑ‰Ð°Ð¼Ðµ protocolData ÐºÑŠÐ¼ Ð¾Ñ€Ð¸Ð³Ð¸Ð½Ð°Ð»Ð½Ð¸Ñ Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»
+    // Връщаме protocolData към оригиналния протокол
     if (profile.protocol) {
       setProtocolData({ ...profile.protocol });
     }
@@ -816,7 +816,7 @@ const THUBApp = () => {
           <div style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }} className="w-20 h-20 rounded-2xl border-2 flex items-center justify-center mb-4 mx-auto shadow-xl">
             <span className="text-white text-lg font-black tracking-tight">THUB</span>
           </div>
-          <p style={{ color: '#64748b' }}>Ð—Ð°Ñ€ÐµÐ¶Ð´Ð°Ð½Ðµ...</p>
+          <p style={{ color: '#64748b' }}>Зареждане...</p>
         </div>
       </div>
     );
@@ -848,7 +848,7 @@ const THUBApp = () => {
           
           {/* Description - placeholder */}
           <p style={{ color: '#64748b' }} className="text-base leading-relaxed mb-8">
-            ÐŸÑ€ÐµÑ†Ð¸Ð·Ð½Ð¾ Ð´Ð¾Ð·Ð¸Ñ€Ð°Ð½Ðµ Ñ U-100 ÑÐ¿Ñ€Ð¸Ð½Ñ†Ð¾Ð²ÐºÐ¸. ÐžÐ¿Ñ‚Ð¸Ð¼Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð½Ð° Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ð¾Ð½Ð½Ð¸Ñ Ð³Ñ€Ð°Ñ„Ð¸Ðº. ÐŸÑ€Ð¾ÑÐ»ÐµÐ´ÑÐ²Ð°Ð½Ðµ Ð½Ð° ÑÐ¸Ð¼Ð¿Ñ‚Ð¾Ð¼Ð¸ Ð¸ Ð¿Ñ€Ð¾Ð³Ñ€ÐµÑ. Ð’ÑÐ¸Ñ‡ÐºÐ¾ Ð½Ð° ÐµÐ´Ð½Ð¾ Ð¼ÑÑÑ‚Ð¾.
+            Прецизно дозиране с U-100 спринцовки. Оптимизация на инжекционния график. Проследяване на симптоми и прогрес. Всичко на едно място.
           </p>
           
           {/* CTA Button - placeholder for marketing */}
@@ -856,7 +856,7 @@ const THUBApp = () => {
             style={{ borderColor: '#1e3a5f', color: '#94a3b8' }}
             className="w-full py-4 border rounded-xl font-medium hover:bg-white/5 transition-colors"
           >
-            ÐÐ°ÑƒÑ‡Ð¸ Ð¿Ð¾Ð²ÐµÑ‡Ðµ Ð·Ð° THUB â†’
+            Научи повече за THUB →
           </button>
 
           {/* Demo Button for Testing */}
@@ -865,7 +865,7 @@ const THUBApp = () => {
             style={{ backgroundColor: '#1e3a5f', color: '#22d3ee' }}
             className="w-full py-3 rounded-xl font-medium hover:bg-cyan-900/50 transition-colors mt-3"
           >
-            ðŸš€ Demo Ñ€ÐµÐ¶Ð¸Ð¼ (Ð±ÑŠÑ€Ð· Ñ‚ÐµÑÑ‚)
+            🚀 Demo режим (бърз тест)
           </button>
         </div>
 
@@ -913,7 +913,7 @@ const THUBApp = () => {
                 <>
                   <div>
                     <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                      Ð˜Ð¼Ðµ
+                      Име
                     </label>
                     <input
                       type="text"
@@ -937,13 +937,13 @@ const THUBApp = () => {
               {/* Email - both modes */}
               <div>
                 <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                  Ð˜Ð¼ÐµÐ¹Ð»
+                  Имейл
                 </label>
                 <input
                   type="email"
                   name="email"
                   autoComplete="email"
-                  placeholder="Ñ‚Ð²Ð¾ÑÑ‚@Ð¸Ð¼ÐµÐ¹Ð».com"
+                  placeholder="твоят@имейл.com"
                   value={formData.email}
                   onChange={(e) => {
                     setFormData(prev => ({ ...prev, email: e.target.value }));
@@ -962,13 +962,13 @@ const THUBApp = () => {
               {/* Password - both modes */}
               <div>
                 <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                  ÐŸÐ°Ñ€Ð¾Ð»Ð°
+                  Парола
                 </label>
                 <input
                   type="password"
                   name="password"
                   autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'}
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢"
+                  placeholder="••••••"
                   value={formData.password || ''}
                   onChange={(e) => {
                     setFormData(prev => ({ ...prev, password: e.target.value }));
@@ -988,7 +988,7 @@ const THUBApp = () => {
               {authMode === 'signup' && (
                 <div>
                   <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                    ÐŸÐ¾Ñ‚Ð²ÑŠÑ€Ð´Ð¸ Ð¿Ð°Ñ€Ð¾Ð»Ð°
+                    Потвърди парола
                   </label>
                   <input
                     type="password"
@@ -1022,7 +1022,7 @@ const THUBApp = () => {
                     style={{ accentColor: '#06b6d4' }}
                   />
                   <label htmlFor="rememberMe" style={{ color: '#94a3b8' }} className="text-sm cursor-pointer">
-                    Ð—Ð°Ð¿Ð¾Ð¼Ð½Ð¸ Ð¼Ðµ
+                    Запомни ме
                   </label>
                 </div>
               )}
@@ -1051,7 +1051,7 @@ const THUBApp = () => {
                   style={{ color: '#64748b' }}
                   className="text-sm text-center w-full hover:text-cyan-400 transition-colors"
                 >
-                  {resetEmailSent ? 'âœ‰ï¸ Ð˜Ð·Ð¿Ñ€Ð°Ñ‚ÐµÐ½ Ðµ Ð¸Ð¼ÐµÐ¹Ð» Ð·Ð° Ð²ÑŠÐ·ÑÑ‚Ð°Ð½Ð¾Ð²ÑÐ²Ð°Ð½Ðµ' : 'Ð—Ð°Ð±Ñ€Ð°Ð²ÐµÐ½Ð° Ð¿Ð°Ñ€Ð¾Ð»Ð°?'}
+                  {resetEmailSent ? '✉️ Изпратен е имейл за възстановяване' : 'Забравена парола?'}
                 </button>
               )}
             </div>
@@ -1062,7 +1062,7 @@ const THUBApp = () => {
               style={{ color: '#334155' }}
               className="w-full mt-6 py-2 text-xs hover:text-red-400 transition-colors"
             >
-              ðŸ”„ Reset App (dev)
+              🔄 Reset App (dev)
             </button>
           </div>
         </div>
@@ -1084,12 +1084,12 @@ const THUBApp = () => {
     ];
 
     const frequencies = [
-      { id: 'ED', name: 'Ð’ÑÐµÐºÐ¸ Ð´ÐµÐ½ (ED)', perWeek: 7 },
-      { id: 'EOD', name: 'ÐŸÑ€ÐµÐ· Ð´ÐµÐ½ (EOD)', perWeek: 3.5 },
-      { id: '3xW', name: '3Ã— ÑÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð¾ (ÐŸÐ¾Ð½/Ð¡Ñ€/ÐŸÐµÑ‚)', perWeek: 3 },
-      { id: '2xW', name: '2Ã— ÑÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð¾ (ÐŸÐ¾Ð½/Ð§ÐµÑ‚)', perWeek: 2 },
-      { id: '1xW', name: '1Ã— ÑÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð¾', perWeek: 1 },
-      { id: '1x2W', name: '1Ã— Ð½Ð° 2 ÑÐµÐ´Ð¼Ð¸Ñ†Ð¸', perWeek: 0.5 },
+      { id: 'ED', name: 'Всеки ден (ED)', perWeek: 7 },
+      { id: 'EOD', name: 'През ден (EOD)', perWeek: 3.5 },
+      { id: '3xW', name: '3× седмично (Пон/Ср/Пет)', perWeek: 3 },
+      { id: '2xW', name: '2× седмично (Пон/Чет)', perWeek: 2 },
+      { id: '1xW', name: '1× седмично', perWeek: 1 },
+      { id: '1x2W', name: '1× на 2 седмици', perWeek: 0.5 },
     ];
 
     // Get current compound and frequency
@@ -1206,15 +1206,15 @@ const THUBApp = () => {
             style={{ color: '#64748b' }}
             className="flex items-center gap-2 hover:text-white transition-colors"
           >
-            â† ÐÐ°Ð·Ð°Ð´
+            ← Назад
           </button>
-          <span className="text-white font-semibold">ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ° Ð½Ð° Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»</span>
+          <span className="text-white font-semibold">Настройка на протокол</span>
           <button
             onClick={handleProtocolSubmit}
             style={{ color: '#22d3ee' }}
             className="font-medium"
           >
-            ÐŸÑ€ÐµÑÐºÐ¾Ñ‡Ð¸ â†’
+            Прескочи →
           </button>
         </header>
 
@@ -1227,7 +1227,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              ÐŸÑ€ÐµÐ¿Ð°Ñ€Ð°Ñ‚
+              Препарат
             </label>
             <select
               value={protocolData.compound}
@@ -1247,7 +1247,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              Ð¡ÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð° Ð´Ð¾Ð·Ð° ({compound.unit})
+              Седмична доза ({compound.unit})
             </label>
             <input
               type="number"
@@ -1264,7 +1264,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              Ð§ÐµÑÑ‚Ð¾Ñ‚Ð°
+              Честота
             </label>
             <select
               value={protocolData.frequency}
@@ -1284,7 +1284,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              ÐÐ°Ñ‡Ð°Ð»Ð¾ Ð½Ð° Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»Ð°
+              Начало на протокола
             </label>
             <input
               type="date"
@@ -1301,7 +1301,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-              Ð¡ÐºÐ°Ð»Ð° Ð½Ð° ÑÐ¿Ñ€Ð¸Ð½Ñ†Ð¾Ð²ÐºÐ°Ñ‚Ð°
+              Скала на спринцовката
             </label>
             <div className="flex gap-3">
               <button
@@ -1314,7 +1314,7 @@ const THUBApp = () => {
                 className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
               >
                 <div className="text-lg">1U</div>
-                <div style={{ color: protocolData.graduation === 1 ? '#cffafe' : '#64748b' }} className="text-xs">Ð¿Ñ€ÐµÑ†Ð¸Ð·Ð½Ð° (0-50U)</div>
+                <div style={{ color: protocolData.graduation === 1 ? '#cffafe' : '#64748b' }} className="text-xs">прецизна (0-50U)</div>
               </button>
               <button
                 onClick={() => setProtocolData(prev => ({ ...prev, graduation: 2 }))}
@@ -1326,7 +1326,7 @@ const THUBApp = () => {
                 className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
               >
                 <div className="text-lg">2U</div>
-                <div style={{ color: protocolData.graduation === 2 ? '#cffafe' : '#64748b' }} className="text-xs">ÑÑ‚Ð°Ð½Ð´Ð°Ñ€Ñ‚ (0-100U)</div>
+                <div style={{ color: protocolData.graduation === 2 ? '#cffafe' : '#64748b' }} className="text-xs">стандарт (0-100U)</div>
               </button>
             </div>
           </div>
@@ -1337,7 +1337,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-              ÐœÐµÑ‚Ð¾Ð´ Ð½Ð° Ð¸Ð½Ð¶ÐµÐºÑ‚Ð¸Ñ€Ð°Ð½Ðµ
+              Метод на инжектиране
             </label>
             <div className="flex gap-3">
               <button
@@ -1349,8 +1349,8 @@ const THUBApp = () => {
                 }}
                 className="flex-1 py-3 border rounded-xl font-medium transition-colors"
               >
-                ðŸ’‰ IM
-                <div style={{ color: protocolData.injectionMethod === 'im' ? '#cffafe' : '#64748b' }} className="text-xs">Ð¸Ð½Ñ‚Ñ€Ð°Ð¼ÑƒÑÐºÑƒÐ»Ð½Ð¾</div>
+                💉 IM
+                <div style={{ color: protocolData.injectionMethod === 'im' ? '#cffafe' : '#64748b' }} className="text-xs">интрамускулно</div>
               </button>
               <button
                 onClick={() => setProtocolData(prev => ({ ...prev, injectionMethod: 'subq' }))}
@@ -1361,8 +1361,8 @@ const THUBApp = () => {
                 }}
                 className="flex-1 py-3 border rounded-xl font-medium transition-colors"
               >
-                ðŸ’§ SubQ
-                <div style={{ color: protocolData.injectionMethod === 'subq' ? '#cffafe' : '#64748b' }} className="text-xs">Ð¿Ð¾Ð´ÐºÐ¾Ð¶Ð½Ð¾</div>
+                💧 SubQ
+                <div style={{ color: protocolData.injectionMethod === 'subq' ? '#cffafe' : '#64748b' }} className="text-xs">подкожно</div>
               </button>
             </div>
           </div>
@@ -1373,13 +1373,13 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-              Ð˜Ð·Ñ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð½Ð° Ð¿Ñ€ÐµÐ¿Ð°Ñ€Ð°Ñ‚Ð°
+              Източник на препарата
             </label>
             <div className="flex gap-2">
               {[
-                { id: 'pharmacy', label: 'ðŸ¥ ÐÐ¿Ñ‚ÐµÐºÐ°' },
-                { id: 'ugl', label: 'ðŸ§ª UGL' },
-                { id: 'unknown', label: 'â“ ÐÐµ Ð·Ð½Ð°Ð¼' }
+                { id: 'pharmacy', label: '🏥 Аптека' },
+                { id: 'ugl', label: '🧪 UGL' },
+                { id: 'unknown', label: '❓ Не знам' }
               ].map(opt => (
                 <button
                   key={opt.id}
@@ -1403,7 +1403,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-              Ð’Ð¸Ð´ Ð¼Ð°ÑÐ»Ð¾ (Ð°ÐºÐ¾ Ð·Ð½Ð°ÐµÑˆ)
+              Вид масло (ако знаеш)
             </label>
             <select
               value={protocolData.oilType}
@@ -1415,8 +1415,8 @@ const THUBApp = () => {
               <option value="grape_seed">Grape Seed Oil</option>
               <option value="sesame">Sesame Oil</option>
               <option value="castor">Castor Oil</option>
-              <option value="other">Ð”Ñ€ÑƒÐ³Ð¾</option>
-              <option value="unknown">ÐÐµ Ð·Ð½Ð°Ð¼</option>
+              <option value="other">Друго</option>
+              <option value="unknown">Не знам</option>
             </select>
           </div>
 
@@ -1427,25 +1427,25 @@ const THUBApp = () => {
           >
             <div className="flex items-center justify-between">
               <div className="text-center flex-1">
-                <div style={{ color: '#64748b' }} className="text-xs mb-1">Ð”Ð¾Ð·Ð°/Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ</div>
+                <div style={{ color: '#64748b' }} className="text-xs mb-1">Доза/инжекция</div>
                 <div style={{ color: '#22d3ee' }} className="text-4xl font-bold">{unitsRounded}U</div>
               </div>
               <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
               <div className="text-center flex-1">
-                <div style={{ color: '#64748b' }} className="text-xs mb-1">ÐÐºÑ‚Ð¸Ð²Ð½Ð¾ Ð²ÐµÑ‰ÐµÑÑ‚Ð²Ð¾</div>
+                <div style={{ color: '#64748b' }} className="text-xs mb-1">Активно вещество</div>
                 <div style={{ color: 'white' }} className="text-xl font-bold">{actualDose.toFixed(1)} {compound.unit}</div>
               </div>
               <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
               <div className="text-center flex-1">
-                <div style={{ color: '#64748b' }} className="text-xs mb-1">ÐžÐ±ÐµÐ¼</div>
+                <div style={{ color: '#64748b' }} className="text-xs mb-1">Обем</div>
                 <div style={{ color: 'white' }} className="text-xl font-bold">{actualMl.toFixed(2)} mL</div>
               </div>
             </div>
             {dosesDiffer && (
               <div className="flex items-center justify-center gap-2 mt-3 pt-3">
-                <span className="text-sm">â„¹ï¸</span>
+                <span className="text-sm">ℹ️</span>
                 <span style={{ color: '#e2e8f0' }} className="text-sm">
-                  ÐžÐ¿Ñ‚Ð¸Ð¼Ð¸Ð·Ð¸Ñ€Ð°Ð½Ð° Ð´Ð¾Ð·Ð° Ð´Ð½ÐµÑ: <span style={{ color: '#22d3ee' }} className="font-bold">{protoTodayDose}U</span> Â· {todayDoseMg.toFixed(1)} {compound.unit} Â· {todayDoseMl.toFixed(2)} mL
+                  Оптимизирана доза днес: <span style={{ color: '#22d3ee' }} className="font-bold">{protoTodayDose}U</span> · {todayDoseMg.toFixed(1)} {compound.unit} · {todayDoseMl.toFixed(2)} mL
                 </span>
               </div>
             )}
@@ -1457,7 +1457,7 @@ const THUBApp = () => {
             className="border rounded-2xl p-4"
           >
             <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-4 text-center">
-              ÐžÑ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»Ð½Ð° ÐºÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸Ñ (6 ÑÐµÐ´Ð¼Ð¸Ñ†Ð¸)
+              Относителна концентрация (6 седмици)
             </label>
             
             <div className="h-48">
@@ -1479,7 +1479,7 @@ const THUBApp = () => {
                   <XAxis 
                     dataKey="day" 
                     tick={{ fill: '#64748b', fontSize: 10 }}
-                    tickFormatter={(v) => `${Math.round(v)}Ð´`}
+                    tickFormatter={(v) => `${Math.round(v)}д`}
                     axisLine={{ stroke: '#334155' }}
                     tickLine={{ stroke: '#334155' }}
                     interval={40}
@@ -1497,10 +1497,10 @@ const THUBApp = () => {
                     labelStyle={{ color: '#94a3b8' }}
                     itemStyle={{ color: '#22d3ee' }}
                     formatter={(value, name) => {
-                      if (name === 'percent') return [`${Math.round(value)}% Ð¾Ñ‚ Ð¿Ð¸Ðº`, 'ÐšÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸Ñ'];
+                      if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
                       return [null, null];
                     }}
-                    labelFormatter={(label) => `Ð”ÐµÐ½ ${Math.round(label * 10) / 10}`}
+                    labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
                   />
                   <Area 
                     type="natural" 
@@ -1521,7 +1521,7 @@ const THUBApp = () => {
             </div>
             
             <div style={{ color: '#475569' }} className="text-xs text-center mt-2">
-              tÂ½ ~{pkParams.halfLife.min.toFixed(1)}-{pkParams.halfLife.max.toFixed(1)}Ð´ â”‚ {pkParams.modifiers.method}{pkParams.modifiers.oil ? ` â”‚ ${pkParams.modifiers.oil}` : ''} â”‚ Trough: ~{stabilityData.troughPercent.min}-{stabilityData.troughPercent.max}%
+              t½ ~{pkParams.halfLife.min.toFixed(1)}-{pkParams.halfLife.max.toFixed(1)}д │ {pkParams.modifiers.method}{pkParams.modifiers.oil ? ` │ ${pkParams.modifiers.oil}` : ''} │ Trough: ~{stabilityData.troughPercent.min}-{stabilityData.troughPercent.max}%
             </div>
           </div>
 
@@ -1547,7 +1547,7 @@ const THUBApp = () => {
               >
                 <div className="flex flex-col items-center">
                   <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-                    Ð˜Ð½Ð´ÐµÐºÑ Ð½Ð° ÑÑ‚Ð°Ð±Ð¸Ð»Ð½Ð¾ÑÑ‚
+                    Индекс на стабилност
                   </label>
 
                   <div className="relative" style={{ width: '180px', height: '180px' }}>
@@ -1605,22 +1605,22 @@ const THUBApp = () => {
                       style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                       className="border rounded-xl p-3 text-center"
                     >
-                      <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">ÐÐ¸Ð²Ð¾ Ð¿Ñ€ÐµÐ´Ð¸ ÑÐ»ÐµÐ´Ð²Ð°Ñ‰Ð° Ð´Ð¾Ð·Ð°</div>
+                      <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Ниво преди следваща доза</div>
                       <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityData.troughPercent.min}-{stabilityData.troughPercent.max}%</div>
-                      <div style={{ color: '#64748b' }} className="text-xs">Ð¾Ñ‚ peak</div>
+                      <div style={{ color: '#64748b' }} className="text-xs">от peak</div>
                     </div>
                     <div 
                       style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                       className="border rounded-xl p-3 text-center"
                     >
-                      <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">ÐÐ¼Ð¿Ð»Ð¸Ñ‚ÑƒÐ´Ð° Ð½Ð° Ð½Ð¸Ð²Ð°Ñ‚Ð°</div>
+                      <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Амплитуда на нивата</div>
                       <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityData.fluctuation.min}-{stabilityData.fluctuation.max}%</div>
-                      <div style={{ color: '#64748b' }} className="text-xs">peak â†’ trough</div>
+                      <div style={{ color: '#64748b' }} className="text-xs">peak → trough</div>
                     </div>
                   </div>
 
                   <p style={{ color: '#334155' }} className="text-xs text-center mt-3">
-                    Ð‘Ð°Ð·Ð¸Ñ€Ð°Ð½Ð¾ Ð½Ð° ÑÑ€ÐµÐ´Ð½Ð¸ Ñ„Ð°Ñ€Ð¼Ð°ÐºÐ¾ÐºÐ¸Ð½ÐµÑ‚Ð¸Ñ‡Ð½Ð¸ Ð´Ð°Ð½Ð½Ð¸. Ð˜Ð½Ð´Ð¸Ð²Ð¸Ð´ÑƒÐ°Ð»Ð½Ð°Ñ‚Ð° Ñ€ÐµÐ°ÐºÑ†Ð¸Ñ Ð²Ð°Ñ€Ð¸Ñ€Ð°.
+                    Базирано на средни фармакокинетични данни. Индивидуалната реакция варира.
                   </p>
                 </div>
               </div>
@@ -1633,7 +1633,7 @@ const THUBApp = () => {
             style={{ background: 'linear-gradient(90deg, #06b6d4, #14b8a6)' }}
             className="w-full py-4 text-white font-bold text-lg rounded-xl transition-all duration-300 shadow-lg"
           >
-            Ð—Ð°Ð¿Ð°Ð·Ð¸ Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð» â†’
+            Запази протокол →
           </button>
 
           {/* Dev Reset */}
@@ -1642,7 +1642,7 @@ const THUBApp = () => {
             style={{ color: '#334155' }}
             className="w-full py-2 text-xs hover:text-red-400 transition-colors"
           >
-            ðŸ”„ Reset App (dev)
+            🔄 Reset App (dev)
           </button>
 
         </div>
@@ -1659,8 +1659,8 @@ const THUBApp = () => {
             >
               {/* Header */}
               <div className="flex items-center gap-3 mb-4">
-                <span className="text-2xl">âš ï¸</span>
-                <h3 className="text-white text-xl font-bold">ÐŸÑ€Ð¾Ð¼ÑÐ½Ð° Ð² Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»Ð°</h3>
+                <span className="text-2xl">⚠️</span>
+                <h3 className="text-white text-xl font-bold">Промяна в протокола</h3>
               </div>
 
               {/* Changes list */}
@@ -1668,14 +1668,14 @@ const THUBApp = () => {
                 style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                 className="border rounded-xl p-4 mb-4"
               >
-                <p style={{ color: '#64748b' }} className="text-sm mb-3">Ð—Ð°ÑÐµÑ‡ÐµÐ½Ð¸ Ð¿Ñ€Ð¾Ð¼ÐµÐ½Ð¸:</p>
+                <p style={{ color: '#64748b' }} className="text-sm mb-3">Засечени промени:</p>
                 <div className="space-y-2">
                   {detectedChanges.map((change, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
-                      <span style={{ color: '#f87171' }}>â€¢</span>
+                      <span style={{ color: '#f87171' }}>•</span>
                       <span style={{ color: '#94a3b8' }}>{change.field}:</span>
                       <span style={{ color: '#f87171' }} className="line-through">{change.from}</span>
-                      <span style={{ color: '#64748b' }}>â†’</span>
+                      <span style={{ color: '#64748b' }}>→</span>
                       <span style={{ color: '#34d399' }}>{change.to}</span>
                     </div>
                   ))}
@@ -1685,12 +1685,12 @@ const THUBApp = () => {
               {/* Reason input */}
               <div className="mb-4">
                 <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                  ÐŸÑ€Ð¸Ñ‡Ð¸Ð½Ð° Ð·Ð° Ð¿Ñ€Ð¾Ð¼ÑÐ½Ð°Ñ‚Ð° <span style={{ color: '#f87171' }}>*</span>
+                  Причина за промяната <span style={{ color: '#f87171' }}>*</span>
                 </label>
                 <textarea
                   value={changeReason}
                   onChange={(e) => setChangeReason(e.target.value)}
-                  placeholder="ÐÐ°Ð¿Ñ€: ÐšÑ€ÑŠÐ²Ð½Ð¸ Ñ€ÐµÐ·ÑƒÐ»Ñ‚Ð°Ñ‚Ð¸ Ð¿Ð¾ÐºÐ°Ð·Ð°Ñ…Ð° Ð½Ð¸ÑÐºÐ¸ Ð½Ð¸Ð²Ð°..."
+                  placeholder="Напр: Кръвни резултати показаха ниски нива..."
                   style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
                   className="w-full px-4 py-3 border rounded-xl focus:outline-none resize-none"
                   rows={3}
@@ -1700,12 +1700,12 @@ const THUBApp = () => {
               {/* Effective From */}
               <div className="mb-4">
                 <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-2">
-                  ÐŸÑ€Ð¾Ð¼ÑÐ½Ð°Ñ‚Ð° Ð²Ð°Ð¶Ð¸ Ð¾Ñ‚:
+                  Промяната важи от:
                 </label>
                 <div className="space-y-2">
                   {[
-                    { id: 'next', label: `ÐžÑ‚ ÑÐ»ÐµÐ´Ð²Ð°Ñ‰Ð°Ñ‚Ð° Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ (${getNextInjectionDateFromToday()})` },
-                    { id: 'custom', label: 'Ð˜Ð·Ð±ÐµÑ€Ð¸ Ð´Ð°Ñ‚Ð°' }
+                    { id: 'next', label: `От следващата инжекция (${getNextInjectionDateFromToday()})` },
+                    { id: 'custom', label: 'Избери дата' }
                   ].map(opt => (
                     <button
                       key={opt.id}
@@ -1717,7 +1717,7 @@ const THUBApp = () => {
                       className="w-full px-4 py-3 border rounded-xl text-left text-sm transition-all"
                     >
                       <span style={{ color: effectiveFromOption === opt.id ? '#22d3ee' : '#94a3b8' }}>
-                        {effectiveFromOption === opt.id ? 'â— ' : 'â—‹ '}{opt.label}
+                        {effectiveFromOption === opt.id ? '● ' : '○ '}{opt.label}
                       </span>
                     </button>
                   ))}
@@ -1741,7 +1741,7 @@ const THUBApp = () => {
                   style={{ backgroundColor: '#1e293b', color: '#94a3b8' }}
                   className="flex-1 py-3 rounded-xl font-semibold hover:bg-slate-700 transition-colors"
                 >
-                  ÐžÑ‚ÐºÐ°Ð·
+                  Отказ
                 </button>
                 <button
                   onClick={() => saveProtocol(changeReason)}
@@ -1754,7 +1754,7 @@ const THUBApp = () => {
                   }}
                   className="flex-1 py-3 rounded-xl font-semibold transition-colors"
                 >
-                  ÐŸÐ¾Ñ‚Ð²ÑŠÑ€Ð´Ð¸
+                  Потвърди
                 </button>
               </div>
             </div>
@@ -1778,16 +1778,16 @@ const THUBApp = () => {
   ];
 
   const frequenciesData = [
-    { id: 'ED', name: 'Ð’ÑÐµÐºÐ¸ Ð´ÐµÐ½', shortName: 'ED', perWeek: 7, periodDays: 7 },
-    { id: 'EOD', name: 'ÐŸÑ€ÐµÐ· Ð´ÐµÐ½', shortName: 'EOD', perWeek: 3.5, periodDays: 14 },
-    { id: '3xW', name: '3Ã— ÑÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð¾', shortName: '3xW', perWeek: 3, periodDays: 7 },
-    { id: '2xW', name: '2Ã— ÑÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð¾', shortName: '2xW', perWeek: 2, periodDays: 7 },
-    { id: '1xW', name: '1Ã— ÑÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð¾', shortName: '1xW', perWeek: 1, periodDays: 7 },
-    { id: '1x2W', name: '1Ã— Ð½Ð° 2 ÑÐµÐ´Ð¼Ð¸Ñ†Ð¸', shortName: '1x2W', perWeek: 0.5, periodDays: 14 },
+    { id: 'ED', name: 'Всеки ден', shortName: 'ED', perWeek: 7, periodDays: 7 },
+    { id: 'EOD', name: 'През ден', shortName: 'EOD', perWeek: 3.5, periodDays: 14 },
+    { id: '3xW', name: '3× седмично', shortName: '3xW', perWeek: 3, periodDays: 7 },
+    { id: '2xW', name: '2× седмично', shortName: '2xW', perWeek: 2, periodDays: 7 },
+    { id: '1xW', name: '1× седмично', shortName: '1xW', perWeek: 1, periodDays: 7 },
+    { id: '1x2W', name: '1× на 2 седмици', shortName: '1x2W', perWeek: 0.5, periodDays: 14 },
   ];
 
-  const monthNames = ['Ð¯Ð½ÑƒÐ°Ñ€Ð¸', 'Ð¤ÐµÐ²Ñ€ÑƒÐ°Ñ€Ð¸', 'ÐœÐ°Ñ€Ñ‚', 'ÐÐ¿Ñ€Ð¸Ð»', 'ÐœÐ°Ð¹', 'Ð®Ð½Ð¸', 'Ð®Ð»Ð¸', 'ÐÐ²Ð³ÑƒÑÑ‚', 'Ð¡ÐµÐ¿Ñ‚ÐµÐ¼Ð²Ñ€Ð¸', 'ÐžÐºÑ‚Ð¾Ð¼Ð²Ñ€Ð¸', 'ÐÐ¾ÐµÐ¼Ð²Ñ€Ð¸', 'Ð”ÐµÐºÐµÐ¼Ð²Ñ€Ð¸'];
-  const dayNames = ['ÐÐ´', 'ÐŸÐ½', 'Ð’Ñ‚', 'Ð¡Ñ€', 'Ð§Ñ‚', 'ÐŸÑ‚', 'Ð¡Ð±'];
+  const monthNames = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
+  const dayNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
   // Get protocol from profile
   const proto = profile.protocol || protocolData;
@@ -1905,7 +1905,7 @@ const THUBApp = () => {
   // Auto-refresh: ticker changes every minute, triggering re-render and new Date()
   const currentStatus = calculateCurrentStatus();
 
-  // Rotation schedule (ÐžÐŸÐ“)
+  // Rotation schedule (ОПГ)
   const injectionsPerPeriod = proto.frequency === 'EOD' ? 7 : freq.perWeek;
   const targetPerPeriod = proto.frequency === 'EOD' ? proto.weeklyDose * 2 : proto.weeklyDose;
 
@@ -2324,7 +2324,7 @@ const THUBApp = () => {
               }}
               className="w-full border px-4 py-3 flex items-center justify-between"
             >
-              <span style={{ color: '#94a3b8' }} className="text-sm font-medium">Ð¡ÑƒÑ‚Ñ€ÐµÑˆÐµÐ½ Ð¿ÑƒÐ»Ñ</span>
+              <span style={{ color: '#94a3b8' }} className="text-sm font-medium">Сутрешен пулс</span>
               <div className="flex items-center gap-2">
                 {!pulseOpen && todayPulse.erection && (
                   <span style={{ 
@@ -2333,7 +2333,7 @@ const THUBApp = () => {
                     color: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626',
                     padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 
                   }}>
-                    {todayPulse.erection === 'yes' ? 'Ð”Ð°' : todayPulse.erection === 'weak' ? 'Ð¡Ð»Ð°Ð±Ð°' : 'ÐÐµ'}
+                    {todayPulse.erection === 'yes' ? 'Да' : todayPulse.erection === 'weak' ? 'Слаба' : 'Не'}
                   </span>
                 )}
                 {!pulseOpen && todayPulse.wakeup && (
@@ -2343,7 +2343,7 @@ const THUBApp = () => {
                     color: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626',
                     padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 
                   }}>
-                    {todayPulse.wakeup === 'fresh' ? 'Ð¡Ð²ÐµÐ¶' : todayPulse.wakeup === 'normal' ? 'ÐÐ¾Ñ€Ð¼.' : 'Ð¢ÐµÐ¶ÐºÐ¾'}
+                    {todayPulse.wakeup === 'fresh' ? 'Свеж' : todayPulse.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
                   </span>
                 )}
                 <span style={{ color: '#475569', transform: pulseOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="text-sm">â–¼</span>
@@ -2355,12 +2355,12 @@ const THUBApp = () => {
                 style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f', borderTop: 'none', borderRadius: '0 0 16px 16px', marginTop: 0 }}
                 className="border px-4 py-4 -mt-4"
               >
-                <p className="text-white text-sm font-medium mb-2 text-center">Ð¡ÑƒÑ‚Ñ€ÐµÑˆÐ½Ð° ÐµÑ€ÐµÐºÑ†Ð¸Ñ?</p>
+                <p className="text-white text-sm font-medium mb-2 text-center">Сутрешна ерекция?</p>
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   {[
-                    { id: 'yes', label: 'Ð”Ð°', color: '#059669' },
-                    { id: 'weak', label: 'Ð¡Ð»Ð°Ð±Ð°', color: '#d97706' },
-                    { id: 'no', label: 'ÐÐµ', color: '#dc2626' },
+                    { id: 'yes', label: 'Да', color: '#059669' },
+                    { id: 'weak', label: 'Слаба', color: '#d97706' },
+                    { id: 'no', label: 'Не', color: '#dc2626' },
                   ].map(opt => (
                     <button
                       key={opt.id}
@@ -2376,12 +2376,12 @@ const THUBApp = () => {
                   ))}
                 </div>
 
-                <p className="text-white text-sm font-medium mb-2 text-center">ÐšÐ°Ðº ÑÐµ ÑÑŠÐ±ÑƒÐ´Ð¸?</p>
+                <p className="text-white text-sm font-medium mb-2 text-center">Как се събуди?</p>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: 'fresh', label: 'Ð¡Ð²ÐµÐ¶', color: '#059669' },
-                    { id: 'normal', label: 'ÐÐ¾Ñ€Ð¼Ð°Ð»Ð½Ð¾', color: '#d97706' },
-                    { id: 'heavy', label: 'Ð¢ÐµÐ¶ÐºÐ¾', color: '#dc2626' },
+                    { id: 'fresh', label: 'Свеж', color: '#059669' },
+                    { id: 'normal', label: 'Нормално', color: '#d97706' },
+                    { id: 'heavy', label: 'Тежко', color: '#dc2626' },
                   ].map(opt => (
                     <button
                       key={opt.id}
@@ -2418,7 +2418,7 @@ const THUBApp = () => {
                     </div>
                     
                     <div className="text-center">
-                      <p style={{ color: '#64748b' }} className="text-base mb-1">Ð”Ñ€ÑŠÐ¿Ð½Ð¸ Ð´Ð¾</p>
+                      <p style={{ color: '#64748b' }} className="text-base mb-1">Дръпни до</p>
                       <p 
                         style={{ color: todayCompleted ? '#34d399' : '#22d3ee' }} 
                         className="text-6xl font-bold"
@@ -2440,10 +2440,10 @@ const THUBApp = () => {
                 >
                   <div className="grid grid-cols-4 gap-2">
                     {[
-                      { id: 'glute', label: 'Ð“Ð»ÑƒÑ‚ÐµÑƒÑ', emoji: 'ðŸ‘' },
-                      { id: 'delt', label: 'Ð”ÐµÐ»Ñ‚Ð¾Ð¸Ð´', emoji: 'ðŸ’ª' },
-                      { id: 'quad', label: 'Ð‘ÐµÐ´Ñ€Ð¾', emoji: 'ðŸ¦µ' },
-                      { id: 'abdomen', label: 'ÐšÐ¾Ñ€ÐµÐ¼', emoji: 'â­•' }
+                      { id: 'glute', label: 'Глутеус', emoji: '🍑' },
+                      { id: 'delt', label: 'Делтоид', emoji: '💪' },
+                      { id: 'quad', label: 'Бедро', emoji: '🦵' },
+                      { id: 'abdomen', label: 'Корем', emoji: '⭕' }
                     ].map(loc => {
                       const isSelected = selectedLocation === loc.id;
                       return (
@@ -2467,7 +2467,7 @@ const THUBApp = () => {
                           <span style={{ color: isSelected ? '#22d3ee' : '#94a3b8' }} className="text-xs font-medium">{loc.label}</span>
                           {isSelected && selectedSide && (
                             <span style={{ color: '#0891b2' }} className="text-xs font-medium">
-                              {selectedSide === 'left' ? 'Ð›ÑÐ²Ð¾' : 'Ð”ÑÑÐ½Ð¾'}
+                              {selectedSide === 'left' ? 'Ляво' : 'Дясно'}
                             </span>
                           )}
                         </button>
@@ -2502,7 +2502,7 @@ const THUBApp = () => {
                           style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                           className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
                         >
-                          Ð›ÑÐ²Ð¾
+                          Ляво
                         </button>
                         <button
                           onClick={() => {
@@ -2514,7 +2514,7 @@ const THUBApp = () => {
                           style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                           className="flex-1 py-4 border rounded-xl font-semibold text-white hover:bg-cyan-900 transition-colors"
                         >
-                          Ð”ÑÑÐ½Ð¾
+                          Дясно
                         </button>
                       </div>
 
@@ -2526,7 +2526,7 @@ const THUBApp = () => {
                         style={{ color: '#64748b' }}
                         className="w-full mt-4 py-2 text-sm hover:text-white transition-colors"
                       >
-                        ÐžÑ‚ÐºÐ°Ð·
+                        Отказ
                       </button>
                     </div>
                   </div>
@@ -2539,12 +2539,12 @@ const THUBApp = () => {
                     style={{ background: 'linear-gradient(90deg, #059669, #10b981)' }}
                     className="w-full py-4 text-white font-semibold rounded-xl transition-all"
                   >
-                    {`âœ“ ÐÐ°Ð¿Ñ€Ð°Ð²ÐµÐ½Ð¾ ${todayEntry?.time} ${
-                      todayEntry?.location === 'glute' ? 'ðŸ‘' : 
-                      todayEntry?.location === 'delt' ? 'ðŸ’ª' : 
-                      todayEntry?.location === 'quad' ? 'ðŸ¦µ' : 
+                    {`✓ Направено ${todayEntry?.time} ${
+                      todayEntry?.location === 'glute' ? '🍑' : 
+                      todayEntry?.location === 'delt' ? '💪' : 
+                      todayEntry?.location === 'quad' ? '🦵' : 
                       todayEntry?.location === 'abdomen' ? 'â­•' : ''
-                    }${todayEntry?.side === 'left' ? 'Ð›' : todayEntry?.side === 'right' ? 'Ð”' : ''}`}
+                    }${todayEntry?.side === 'left' ? 'Л' : todayEntry?.side === 'right' ? 'Д' : ''}`}
                   </button>
                 ) : todayMissed ? (
                   <div>
@@ -2553,7 +2553,7 @@ const THUBApp = () => {
                       style={{ background: 'linear-gradient(90deg, #d97706, #f59e0b)' }}
                       className="w-full py-4 text-white font-semibold rounded-xl transition-all"
                     >
-                      âš ï¸ ÐŸÑ€Ð¾Ð¿ÑƒÑÐ½Ð°Ñ‚Ð¾ â€” Ð´Ð¾Ð±Ð°Ð²Ð¸ Ð¿Ñ€Ð¸Ñ‡Ð¸Ð½Ð°
+                      ⚠️ Пропуснато — добави причина
                     </button>
                     <button
                       onClick={() => {
@@ -2567,7 +2567,7 @@ const THUBApp = () => {
                       style={{ color: '#34d399' }}
                       className="w-full mt-2 py-2 text-sm hover:underline transition-colors text-center"
                     >
-                      Ð’ÑÐµ Ð¿Ð°Ðº Ð³Ð¾ Ð½Ð°Ð¿Ñ€Ð°Ð²Ð¸Ñ… â†’
+                      Все пак го направих →
                     </button>
                   </div>
                 ) : (
@@ -2590,19 +2590,19 @@ const THUBApp = () => {
                         missedInjection ? 'animate-pulse' : ''
                       }`}
                     >
-                      ðŸ’‰ ÐœÐ°Ñ€ÐºÐ¸Ñ€Ð°Ð¹ ÐºÐ°Ñ‚Ð¾ Ð½Ð°Ð¿Ñ€Ð°Ð²ÐµÐ½Ð¾
+                      💉 Маркирай като направено
                     </button>
                     <button
                       onClick={() => openLogModal(todayKey, todayDose, true, null, 'missed')}
                       style={{ color: '#d97706' }}
                       className="w-full mt-2 py-2 text-sm hover:underline transition-colors text-center"
                     >
-                      ÐœÐ°Ñ€ÐºÐ¸Ñ€Ð°Ð¹ Ð¿Ñ€Ð¾Ð¿ÑƒÑÐº â†’
+                      Маркирай пропуск →
                     </button>
                   </div>
                 )}
 
-                {/* Optimization Ð² Today */}
+                {/* Optimization в Today */}
                 {(() => {
                   const isEOD = proto.frequency === 'EOD';
                   const cycleDays = isEOD ? 14 : 7;
@@ -2611,7 +2611,7 @@ const THUBApp = () => {
                   const mondayOfWeek = new Date(todayDate);
                   const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
                   mondayOfWeek.setDate(todayDate.getDate() - daysFromMonday);
-                  const dayNamesShort = ['ÐÐ´', 'ÐŸÐ½', 'Ð’Ñ‚', 'Ð¡Ñ€', 'Ð§Ñ‚', 'ÐŸÑ‚', 'Ð¡Ð±'];
+                  const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
                   
                   const cycleData = [];
                   for (let i = 0; i < cycleDays; i++) {
@@ -2636,7 +2636,7 @@ const THUBApp = () => {
                   cycleInjections.forEach(d => { doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1; });
                   const doseFormula = Object.entries(doseCounts)
                     .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-                    .map(([dose, count]) => `${count}Ã—${dose}U`)
+                    .map(([dose, count]) => `${count}×${dose}U`)
                     .join(' + ');
                   
                   return (
@@ -2660,14 +2660,14 @@ const THUBApp = () => {
                                 <div style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '12px' }}>
                                   {day.dose}U
                                 </div>
-                                {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>âœ“</div>}
+                                {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>✓</div>}
                               </div>
                             );
                           })}
                         </div>
                       </div>
                       <p style={{ color: '#94a3b8' }} className="text-xs text-center mt-2">
-                        {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/ÑÐµÐ´
+                        {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/сед
                       </p>
                     </div>
                   );
@@ -2679,9 +2679,9 @@ const THUBApp = () => {
                 style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                 className="border rounded-2xl p-8 text-center"
               >
-                <p className="text-5xl mb-4">ðŸ˜Œ</p>
-                <p className="text-white text-2xl font-bold">ÐŸÐ¾Ñ‡Ð¸Ð²ÐµÐ½ Ð´ÐµÐ½</p>
-                <p style={{ color: '#64748b' }} className="mt-2">Ð¡Ð»ÐµÐ´Ð²Ð°Ñ‰Ð° Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ ÑÐºÐ¾Ñ€Ð¾</p>
+                <p className="text-5xl mb-4">😌</p>
+                <p className="text-white text-2xl font-bold">Почивен ден</p>
+                <p style={{ color: '#64748b' }} className="mt-2">Следваща инжекция скоро</p>
               </div>
             )}
           </div>
@@ -2710,7 +2710,7 @@ const THUBApp = () => {
                 style={{ color: '#64748b' }}
                 className="p-2"
               >
-                â†
+                ←
               </button>
               <h3 className="text-white font-bold">
                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
@@ -2720,7 +2720,7 @@ const THUBApp = () => {
                 style={{ color: '#64748b' }}
                 className="p-2"
               >
-                â†’
+                →
               </button>
             </div>
 
@@ -2758,11 +2758,11 @@ const THUBApp = () => {
                   const dose = isInj ? (getDoseForDate(date) || unitsRounded) : 0;
                   const canClick = !isFuture;
 
-                  const locationEmoji = doneLocation === 'glute' ? 'ðŸ‘' : 
-                                        doneLocation === 'delt' ? 'ðŸ’ª' : 
-                                        doneLocation === 'quad' ? 'ðŸ¦µ' : 
+                  const locationEmoji = doneLocation === 'glute' ? '🍑' : 
+                                        doneLocation === 'delt' ? '💪' : 
+                                        doneLocation === 'quad' ? '🦵' : 
                                         doneLocation === 'abdomen' ? 'â­•' : '';
-                  const sideLabel = doneSide === 'left' ? 'Ð›' : doneSide === 'right' ? 'Ð”' : '';
+                  const sideLabel = doneSide === 'left' ? 'Л' : doneSide === 'right' ? 'Д' : '';
 
                   cells.push(
                     <button
@@ -2798,19 +2798,19 @@ const THUBApp = () => {
               })()}
             </div>
 
-            {/* Ð˜Ð½ÑÑ‚Ñ€ÑƒÐºÑ†Ð¸Ñ */}
+            {/* Инструкция */}
             <p style={{ color: '#64748b' }} className="text-xs text-center mt-3">
-              ÐÐ°Ñ‚Ð¸ÑÐ½Ð¸ Ð²ÑŠÑ€Ñ…Ñƒ Ð´ÐµÐ½ Ð·Ð° Ð´Ð° Ð»Ð¾Ð³Ð½ÐµÑˆ, Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð°Ñˆ Ð¸Ð»Ð¸ Ð´Ð¾Ð±Ð°Ð²Ð¸Ñˆ Ð¿Ñ€Ð¾Ð¿ÑƒÑÐ½Ð°Ñ‚Ð° Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ. Ð¢Ð¾Ñ‡Ð½Ð¸ÑÑ‚ Ñ‡Ð°Ñ Ð¿Ð¾Ð´Ð¾Ð±Ñ€ÑÐ²Ð° Ð¿Ñ€Ð¾ÑÐ»ÐµÐ´ÑÐ²Ð°Ð½ÐµÑ‚Ð¾ Ð½Ð° Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»Ð°.
+              Натисни върху ден за да логнеш, редактираш или добавиш пропусната инжекция. Точният час подобрява проследяването на протокола.
             </p>
           </div>
 
-          {/* ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸ Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ð¸ */}
+          {/* Последни инжекции */}
           {Object.values(injections).filter(v => v && (v.status === 'done' || !v.status)).length > 0 && (
             <div 
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="border rounded-2xl p-4 mt-4"
             >
-              <h4 style={{ color: '#64748b' }} className="text-sm font-medium mb-3">ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸ Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ð¸</h4>
+              <h4 style={{ color: '#64748b' }} className="text-sm font-medium mb-3">Последни инжекции</h4>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(injections)
                   .filter(([_, data]) => data && (data.status === 'done' || !data.status))
@@ -2822,11 +2822,11 @@ const THUBApp = () => {
                   .slice(0, 10)
                   .map(([dateKey, data]) => {
                     const [year, month, day] = dateKey.split('-').map(Number);
-                    const emoji = data.location === 'glute' ? 'ðŸ‘' : 
-                                  data.location === 'delt' ? 'ðŸ’ª' : 
-                                  data.location === 'quad' ? 'ðŸ¦µ' : 
-                                  data.location === 'abdomen' ? 'â­•' : 'ðŸ’‰';
-                    const side = data.side === 'left' ? 'Ð›' : data.side === 'right' ? 'Ð”' : '';
+                    const emoji = data.location === 'glute' ? '🍑' : 
+                                  data.location === 'delt' ? '💪' : 
+                                  data.location === 'quad' ? '🦵' : 
+                                  data.location === 'abdomen' ? '⭕' : '💉';
+                    const side = data.side === 'left' ? 'Л' : data.side === 'right' ? 'Д' : '';
                     return (
                       <div 
                         key={dateKey}
@@ -2852,7 +2852,7 @@ const THUBApp = () => {
               className="border rounded-2xl p-4"
             >
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-white font-bold">Ð¢ÐµÐºÑƒÑ‰ Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»</h3>
+                <h3 className="text-white font-bold">Текущ протокол</h3>
                 <button 
                   onClick={() => setCurrentStep('protocol')}
                   style={{ 
@@ -2863,55 +2863,55 @@ const THUBApp = () => {
                   }}
                   className="px-3 py-1.5 border rounded-lg text-sm hover:bg-cyan-500/20 hover:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all duration-300"
                 >
-                  Ð ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð°Ð¹
+                  Редактирай
                 </button>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð˜Ð¼Ðµ</span>
+                  <span style={{ color: '#64748b' }}>Име</span>
                   <span className="text-white">{profile.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>ÐŸÑ€ÐµÐ¿Ð°Ñ€Ð°Ñ‚</span>
+                  <span style={{ color: '#64748b' }}>Препарат</span>
                   <span className="text-white">{compound.shortName || compound.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð¡ÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð° Ð´Ð¾Ð·Ð°</span>
+                  <span style={{ color: '#64748b' }}>Седмична доза</span>
                   <span className="text-white">{proto.weeklyDose} {compound.unit}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð§ÐµÑÑ‚Ð¾Ñ‚Ð°</span>
+                  <span style={{ color: '#64748b' }}>Честота</span>
                   <span className="text-white">{freq.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð”Ð¾Ð·Ð°/Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ</span>
+                  <span style={{ color: '#64748b' }}>Доза/инжекция</span>
                   <span style={{ color: '#22d3ee' }} className="font-bold">{unitsRaw.toFixed(1)}U ({dosePerInjection.toFixed(1)} {compound.unit})</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð¡ÐºÐ°Ð»Ð°</span>
+                  <span style={{ color: '#64748b' }}>Скала</span>
                   <span className="text-white">{proto.graduation}U (0-{proto.graduation === 1 ? 50 : 100}U)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>ÐÐ°Ñ‡Ð°Ð»Ð¾ Ð½Ð° Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»Ð°</span>
+                  <span style={{ color: '#64748b' }}>Начало на протокола</span>
                   <span style={{ color: '#22d3ee' }}>{new Date(proto.startDate).toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð˜Ð·Ñ‚Ð¾Ñ‡Ð½Ð¸Ðº</span>
-                  <span className="text-white">{proto.source === 'pharmacy' ? 'ðŸ¥ ÐÐ¿Ñ‚ÐµÐºÐ°' : proto.source === 'ugl' ? 'ðŸ§ª UGL' : 'â“ ÐÐµ Ð·Ð½Ð°Ð¼'}</span>
+                  <span style={{ color: '#64748b' }}>Източник</span>
+                  <span className="text-white">{proto.source === 'pharmacy' ? '🏥 Аптека' : proto.source === 'ugl' ? '🧪 UGL' : '❓ Не знам'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>ÐœÐ°ÑÐ»Ð¾</span>
+                  <span style={{ color: '#64748b' }}>Масло</span>
                   <span className="text-white">
                     {proto.oilType === 'mct' ? 'MCT' : 
                      proto.oilType === 'grape_seed' ? 'Grape Seed' : 
                      proto.oilType === 'sesame' ? 'Sesame' : 
                      proto.oilType === 'castor' ? 'Castor' : 
-                     proto.oilType === 'other' ? 'Ð”Ñ€ÑƒÐ³Ð¾' : 'ÐÐµ Ð·Ð½Ð°Ð¼'}
+                     proto.oilType === 'other' ? 'Друго' : 'Не знам'}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>ÐœÐµÑ‚Ð¾Ð´</span>
-                  <span className="text-white">{proto.injectionMethod === 'im' ? 'ðŸ’‰ IM' : 'ðŸ’§ SubQ'}</span>
+                  <span style={{ color: '#64748b' }}>Метод</span>
+                  <span className="text-white">{proto.injectionMethod === 'im' ? '💉 IM' : '💧 SubQ'}</span>
                 </div>
               </div>
             </div>
@@ -2922,7 +2922,7 @@ const THUBApp = () => {
                 className="border rounded-2xl p-4 text-center"
               >
                 <p style={{ color: '#22d3ee' }} className="text-3xl font-bold">{Object.values(injections).filter(v => v && (v.status === 'done' || !v.status)).length}</p>
-                <p style={{ color: '#64748b' }} className="text-sm">Ð˜Ð½Ð¶ÐµÐºÑ†Ð¸Ð¸</p>
+                <p style={{ color: '#64748b' }} className="text-sm">Инжекции</p>
               </div>
               <div 
                 style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
@@ -2931,7 +2931,7 @@ const THUBApp = () => {
                 <p style={{ color: '#22d3ee' }} className="text-3xl font-bold">
                   {Math.floor((new Date() - new Date(proto.startDate)) / (1000 * 60 * 60 * 24 * 7))}
                 </p>
-                <p style={{ color: '#64748b' }} className="text-sm">Ð¡ÐµÐ´Ð¼Ð¸Ñ†Ð¸</p>
+                <p style={{ color: '#64748b' }} className="text-sm">Седмици</p>
               </div>
             </div>
 
@@ -2942,31 +2942,31 @@ const THUBApp = () => {
             >
               <div className="flex items-center justify-between">
                 <div className="text-center flex-1">
-                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Ð”Ð¾Ð·Ð°/Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ</div>
+                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Доза/инжекция</div>
                   <div style={{ color: '#22d3ee' }} className="text-4xl font-bold">{unitsRounded}U</div>
                 </div>
                 <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
                 <div className="text-center flex-1">
-                  <div style={{ color: '#64748b' }} className="text-xs mb-1">ÐÐºÑ‚Ð¸Ð²Ð½Ð¾ Ð²ÐµÑ‰ÐµÑÑ‚Ð²Ð¾</div>
+                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Активно вещество</div>
                   <div style={{ color: 'white' }} className="text-xl font-bold">{actualDose.toFixed(1)} {compound.unit}</div>
                 </div>
                 <div style={{ backgroundColor: '#1e3a5f', width: '1px', height: '50px' }} />
                 <div className="text-center flex-1">
-                  <div style={{ color: '#64748b' }} className="text-xs mb-1">ÐžÐ±ÐµÐ¼</div>
+                  <div style={{ color: '#64748b' }} className="text-xs mb-1">Обем</div>
                   <div style={{ color: 'white' }} className="text-xl font-bold">{actualMl.toFixed(2)} mL</div>
                 </div>
               </div>
               {rotation && todayDose !== unitsRounded && (
                 <div className="flex items-center justify-center gap-2 mt-3 pt-3">
-                  <span className="text-sm">â„¹ï¸</span>
+                  <span className="text-sm">ℹ️</span>
                   <span style={{ color: '#e2e8f0' }} className="text-sm">
-                    ÐžÐ¿Ñ‚Ð¸Ð¼Ð¸Ð·Ð¸Ñ€Ð°Ð½Ð° Ð´Ð¾Ð·Ð° Ð´Ð½ÐµÑ: <span style={{ color: '#22d3ee' }} className="font-bold">{todayDose}U</span> Â· {((todayDose / 100) * compound.concentration).toFixed(1)} {compound.unit} Â· {(todayDose / 100).toFixed(2)} mL
+                    Оптимизирана доза днес: <span style={{ color: '#22d3ee' }} className="font-bold">{todayDose}U</span> · {((todayDose / 100) * compound.concentration).toFixed(1)} {compound.unit} · {(todayDose / 100).toFixed(2)} mL
                   </span>
                 </div>
               )}
             </div>
 
-            {/* ÐžÐ¿Ñ‚Ð¸Ð¼Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð½Ð° Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»Ð° */}
+            {/* Оптимизация на протокола */}
             {(() => {
               const isEOD = proto.frequency === 'EOD';
               const cycleDays = isEOD ? 14 : 7;
@@ -2977,7 +2977,7 @@ const THUBApp = () => {
               const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
               mondayOfWeek.setDate(todayDate.getDate() - daysFromMonday);
               
-              const dayNamesShort = ['ÐÐ´', 'ÐŸÐ½', 'Ð’Ñ‚', 'Ð¡Ñ€', 'Ð§Ñ‚', 'ÐŸÑ‚', 'Ð¡Ð±'];
+              const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
               
               const cycleData = [];
               for (let i = 0; i < cycleDays; i++) {
@@ -3006,7 +3006,7 @@ const THUBApp = () => {
               cycleInjections.forEach(d => { doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1; });
               const doseFormula = Object.entries(doseCounts)
                 .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
-                .map(([dose, count]) => `${count}Ã—${dose}U`)
+                .map(([dose, count]) => `${count}×${dose}U`)
                 .join(' + ');
               
               return (
@@ -3015,7 +3015,7 @@ const THUBApp = () => {
                   className="border rounded-2xl p-4"
                 >
                   <p style={{ color: '#22d3ee' }} className="font-semibold mb-3 text-sm">
-                    ÐžÐ¿Ñ‚Ð¸Ð¼Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð½Ð° Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»Ð° {isEOD ? '(14 Ð´Ð½Ð¸)' : ''}
+                    Оптимизация на протокола {isEOD ? '(14 дни)' : ''}
                   </p>
                   
                   <div className="overflow-x-auto pt-2 pb-2">
@@ -3042,7 +3042,7 @@ const THUBApp = () => {
                             <div style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '12px' }}>
                               {day.dose}U
                             </div>
-                            {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>âœ“</div>}
+                            {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>✓</div>}
                           </div>
                         );
                       })}
@@ -3050,7 +3050,7 @@ const THUBApp = () => {
                   </div>
                   
                   <p style={{ color: '#94a3b8' }} className="text-sm text-center mt-2">
-                    {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/ÑÐµÐ´
+                    {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/сед
                   </p>
                 </div>
               );
@@ -3069,7 +3069,7 @@ const THUBApp = () => {
                 style={{ backgroundColor: '#1c1917', borderColor: '#78350f' }}
                 className="border rounded-2xl p-4"
               >
-                <p style={{ color: '#fbbf24' }} className="font-semibold mb-1">ðŸ“Š Ð¡ÐµÐ´Ð¼Ð¸Ñ‡Ð½Ð° Ð´ÐµÐ»Ñ‚Ð°</p>
+                <p style={{ color: '#fbbf24' }} className="font-semibold mb-1">📊 Седмична делта</p>
                 <p style={{ color: '#d97706' }} className="text-sm">
                   {deltaAbs >= 0 ? '+' : ''}{deltaAbs.toFixed(1)} {compound.unit} ({(deltaPct * 100).toFixed(2)}%)
                 </p>
@@ -3082,7 +3082,7 @@ const THUBApp = () => {
               className="border rounded-2xl p-4"
             >
               <p style={{ color: '#64748b' }} className="text-sm font-medium mb-3 text-center">
-                ÐžÑ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»Ð½Ð° ÐºÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸Ñ (6 ÑÐµÐ´Ð¼Ð¸Ñ†Ð¸)
+                Относителна концентрация (6 седмици)
               </p>
               
               {/* Current status indicator with toggle */}
@@ -3105,25 +3105,25 @@ const THUBApp = () => {
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
                     <span style={{ color: '#fbbf24' }} className="text-sm font-medium">
-                      Ð¡ÐµÐ³Ð°: ~{currentStatus.currentPercent}% Ð¾Ñ‚ steady state
+                      Сега: ~{currentStatus.currentPercent}% от steady state
                     </span>
                   </div>
                   <div className="flex items-center justify-center gap-3 mt-1 text-xs" style={{ color: '#64748b' }}>
-                    <span>{currentStatus.hoursSinceLastInjection}Ñ‡ ÑÐ»ÐµÐ´ Ð¸Ð½Ð¶.</span>
-                    <span>â€¢</span>
-                    <span>Ð”ÐµÐ½ {currentStatus.daysOnProtocol}</span>
-                    <span>â€¢</span>
-                    <span>{currentStatus.totalInjections} Ð¸Ð½Ð¶. Ð»Ð¾Ð³Ð½Ð°Ñ‚Ð¸</span>
+                    <span>{currentStatus.hoursSinceLastInjection}ч след инж.</span>
+                    <span>•</span>
+                    <span>Ден {currentStatus.daysOnProtocol}</span>
+                    <span>•</span>
+                    <span>{currentStatus.totalInjections} инж. логнати</span>
                     {currentStatus.hoursToNextPeak > 0 && currentStatus.hoursSinceLastInjection < 48 && (
                       <>
-                        <span>â€¢</span>
-                        <span>ÐŸÐ¸Ðº ~{currentStatus.hoursToNextPeak}Ñ‡</span>
+                        <span>•</span>
+                        <span>Пик ~{currentStatus.hoursToNextPeak}ч</span>
                       </>
                     )}
                   </div>
                   {currentStatus.daysOnProtocol < 28 && (
                     <p className="text-xs text-center mt-1" style={{ color: '#f59e0b' }}>
-                      âš ï¸ Steady state ÑÐ»ÐµÐ´ ~{28 - currentStatus.daysOnProtocol} Ð´Ð½Ð¸
+                      ⚠️ Steady state след ~{28 - currentStatus.daysOnProtocol} дни
                     </p>
                   )}
                 </div>
@@ -3144,7 +3144,7 @@ const THUBApp = () => {
                     OFF
                   </button>
                   <p style={{ color: '#64748b' }} className="text-sm text-center py-1">
-                    Live ÑÑ‚Ð°Ñ‚ÑƒÑ Ð¸Ð·ÐºÐ»ÑŽÑ‡ÐµÐ½
+                    Live статус изключен
                   </p>
                 </div>
               ) : null}
@@ -3168,7 +3168,7 @@ const THUBApp = () => {
                     <XAxis 
                       dataKey="day" 
                       tick={{ fill: '#64748b', fontSize: 10 }}
-                      tickFormatter={(v) => `${Math.round(v)}Ð´`}
+                      tickFormatter={(v) => `${Math.round(v)}д`}
                       axisLine={{ stroke: '#334155' }}
                       tickLine={{ stroke: '#334155' }}
                       interval={40}
@@ -3186,10 +3186,10 @@ const THUBApp = () => {
                       labelStyle={{ color: '#94a3b8' }}
                       itemStyle={{ color: '#22d3ee' }}
                       formatter={(value, name) => {
-                        if (name === 'percent') return [`${Math.round(value)}% Ð¾Ñ‚ Ð¿Ð¸Ðº`, 'ÐšÐ¾Ð½Ñ†ÐµÐ½Ñ‚Ñ€Ð°Ñ†Ð¸Ñ'];
+                        if (name === 'percent') return [`${Math.round(value)}% от пик`, 'Концентрация'];
                         return [null, null];
                       }}
-                      labelFormatter={(label) => `Ð”ÐµÐ½ ${Math.round(label * 10) / 10}`}
+                      labelFormatter={(label) => `Ден ${Math.round(label * 10) / 10}`}
                     />
                     <Area 
                       type="natural" 
@@ -3210,7 +3210,7 @@ const THUBApp = () => {
               </div>
               
               <div style={{ color: '#475569' }} className="text-xs text-center mt-2">
-                tÂ½ ~{pkParamsMain.halfLife.min.toFixed(1)}-{pkParamsMain.halfLife.max.toFixed(1)}Ð´ â”‚ {pkParamsMain.modifiers.method}{pkParamsMain.modifiers.oil ? ` â”‚ ${pkParamsMain.modifiers.oil}` : ''} â”‚ Trough: ~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%
+                t½ ~{pkParamsMain.halfLife.min.toFixed(1)}-{pkParamsMain.halfLife.max.toFixed(1)}д │ {pkParamsMain.modifiers.method}{pkParamsMain.modifiers.oil ? ` │ ${pkParamsMain.modifiers.oil}` : ''} │ Trough: ~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%
               </div>
             </div>
 
@@ -3236,7 +3236,7 @@ const THUBApp = () => {
                 >
                   <div className="flex flex-col items-center">
                     <label style={{ color: '#64748b' }} className="block text-sm font-medium mb-3">
-                      Ð˜Ð½Ð´ÐµÐºÑ Ð½Ð° ÑÑ‚Ð°Ð±Ð¸Ð»Ð½Ð¾ÑÑ‚
+                      Индекс на стабилност
                     </label>
 
                     <div className="relative" style={{ width: '180px', height: '180px' }}>
@@ -3294,22 +3294,22 @@ const THUBApp = () => {
                         style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                         className="border rounded-xl p-3 text-center"
                       >
-                        <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">ÐÐ¸Ð²Ð¾ Ð¿Ñ€ÐµÐ´Ð¸ ÑÐ»ÐµÐ´Ð²Ð°Ñ‰Ð° Ð´Ð¾Ð·Ð°</div>
+                        <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Ниво преди следваща доза</div>
                         <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityDataMain.troughPercent.min}-{stabilityDataMain.troughPercent.max}%</div>
-                        <div style={{ color: '#64748b' }} className="text-xs">Ð¾Ñ‚ peak</div>
+                        <div style={{ color: '#64748b' }} className="text-xs">от peak</div>
                       </div>
                       <div 
                         style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }}
                         className="border rounded-xl p-3 text-center"
                       >
-                        <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">ÐÐ¼Ð¿Ð»Ð¸Ñ‚ÑƒÐ´Ð° Ð½Ð° Ð½Ð¸Ð²Ð°Ñ‚Ð°</div>
+                        <div style={{ color: '#64748b' }} className="text-sm font-medium mb-1">Амплитуда на нивата</div>
                         <div style={{ color: '#e2e8f0' }} className="text-lg font-bold">~{stabilityDataMain.fluctuation.min}-{stabilityDataMain.fluctuation.max}%</div>
-                        <div style={{ color: '#64748b' }} className="text-xs">peak â†’ trough</div>
+                        <div style={{ color: '#64748b' }} className="text-xs">peak → trough</div>
                       </div>
                     </div>
 
                     <p style={{ color: '#334155' }} className="text-xs text-center mt-3">
-                      Ð‘Ð°Ð·Ð¸Ñ€Ð°Ð½Ð¾ Ð½Ð° ÑÑ€ÐµÐ´Ð½Ð¸ Ñ„Ð°Ñ€Ð¼Ð°ÐºÐ¾ÐºÐ¸Ð½ÐµÑ‚Ð¸Ñ‡Ð½Ð¸ Ð´Ð°Ð½Ð½Ð¸. Ð˜Ð½Ð´Ð¸Ð²Ð¸Ð´ÑƒÐ°Ð»Ð½Ð°Ñ‚Ð° Ñ€ÐµÐ°ÐºÑ†Ð¸Ñ Ð²Ð°Ñ€Ð¸Ñ€Ð°.
+                      Базирано на средни фармакокинетични данни. Индивидуалната реакция варира.
                     </p>
                   </div>
                 </div>
@@ -3322,7 +3322,7 @@ const THUBApp = () => {
                 style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                 className="border rounded-2xl p-4"
               >
-                <h3 className="text-white font-bold mb-4">ðŸ“‹ Ð˜ÑÑ‚Ð¾Ñ€Ð¸Ñ Ð½Ð° Ð¿Ñ€Ð¾Ð¼ÐµÐ½Ð¸Ñ‚Ðµ</h3>
+                <h3 className="text-white font-bold mb-4">📋 История на промените</h3>
                 <div className="space-y-3">
                   {profile.protocolHistory.slice().reverse().map((entry, i) => (
                     <div 
@@ -3346,7 +3346,7 @@ const THUBApp = () => {
                       </p>
                       {entry.effectiveFrom && (
                         <p style={{ color: '#f59e0b' }} className="text-xs mb-1">
-                          Ð’Ð°Ð¶Ð¸ Ð¾Ñ‚: {new Date(entry.effectiveFrom).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          Важи от: {new Date(entry.effectiveFrom).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short', year: 'numeric' })}
                           {entry.effectiveMethod && <span style={{ color: '#64748b' }}> ({entry.effectiveMethod})</span>}
                         </p>
                       )}
@@ -3367,9 +3367,9 @@ const THUBApp = () => {
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="border rounded-2xl p-8 text-center"
           >
-            <p className="text-4xl mb-4">ðŸ“</p>
-            <p className="text-white font-bold">Ð–ÑƒÑ€Ð½Ð°Ð»</p>
-            <p style={{ color: '#64748b' }} className="text-sm mt-2">Ð¡ÐºÐ¾Ñ€Ð¾...</p>
+            <p className="text-4xl mb-4">📝</p>
+            <p className="text-white font-bold">Журнал</p>
+            <p style={{ color: '#64748b' }} className="text-sm mt-2">Скоро...</p>
           </div>
         )}
 
@@ -3380,14 +3380,14 @@ const THUBApp = () => {
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="border rounded-2xl p-4"
             >
-              <h3 className="text-white font-bold mb-4">ÐŸÑ€Ð¾Ñ„Ð¸Ð»</h3>
+              <h3 className="text-white font-bold mb-4">Профил</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð˜Ð¼Ðµ</span>
+                  <span style={{ color: '#64748b' }}>Име</span>
                   <span className="text-white">{profile.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span style={{ color: '#64748b' }}>Ð˜Ð¼ÐµÐ¹Ð»</span>
+                  <span style={{ color: '#64748b' }}>Имейл</span>
                   <span className="text-white">{profile.email}</span>
                 </div>
               </div>
@@ -3398,8 +3398,8 @@ const THUBApp = () => {
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="w-full border rounded-2xl p-4 text-left flex items-center justify-between"
             >
-              <span className="text-white">Ð ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð°Ð¹ Ð¿Ñ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»</span>
-              <span style={{ color: '#64748b' }}>â†’</span>
+              <span className="text-white">Редактирай протокол</span>
+              <span style={{ color: '#64748b' }}>→</span>
             </button>
 
             <button
@@ -3407,8 +3407,8 @@ const THUBApp = () => {
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="w-full border rounded-2xl p-4 text-left flex items-center justify-between"
             >
-              <span className="text-white">ðŸšª Ð˜Ð·Ñ…Ð¾Ð´</span>
-              <span style={{ color: '#64748b' }}>â†’</span>
+              <span className="text-white">🚪 Изход</span>
+              <span style={{ color: '#64748b' }}>→</span>
             </button>
 
             <button
@@ -3416,7 +3416,7 @@ const THUBApp = () => {
               style={{ borderColor: '#7f1d1d' }}
               className="w-full border rounded-2xl p-4 text-red-400 text-center"
             >
-              ðŸ”„ Reset App (Ð¸Ð·Ñ‚Ñ€Ð¸Ð²Ð° Ð²ÑÐ¸Ñ‡ÐºÐ¾)
+              🔄 Reset App (изтрива всичко)
             </button>
           </div>
         )}
@@ -3432,7 +3432,7 @@ const THUBApp = () => {
             style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
             className="w-full max-w-sm border rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-white text-xl font-bold text-center mb-4">ðŸ’‰ Ð˜Ð½Ð¶ÐµÐºÑ†Ð¸Ñ</h3>
+            <h3 className="text-white text-xl font-bold text-center mb-4">💉 Инжекция</h3>
 
             {/* Status Selector */}
             <div className="grid grid-cols-2 gap-2 mb-5">
@@ -3444,7 +3444,7 @@ const THUBApp = () => {
                 }}
                 className="py-3 border rounded-xl text-white font-medium text-sm"
               >
-                âœ… ÐÐ°Ð¿Ñ€Ð°Ð²ÐµÐ½Ð°
+                ✅ Направена
               </button>
               <button
                 onClick={() => setLogStatus('missed')}
@@ -3454,7 +3454,7 @@ const THUBApp = () => {
                 }}
                 className="py-3 border rounded-xl text-white font-medium text-sm"
               >
-                âš ï¸ ÐŸÑ€Ð¾Ð¿ÑƒÑÐ½Ð°Ñ‚Ð°
+                ⚠️ Пропусната
               </button>
             </div>
 
@@ -3462,7 +3462,7 @@ const THUBApp = () => {
               <>
                 {/* Time Picker */}
                 <div className="mb-4">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Ð§Ð°Ñ Ð½Ð° Ð¸Ð½Ð¶ÐµÐºÑ†Ð¸Ñ</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Час на инжекция</label>
                   <input
                     type="time"
                     value={logTime}
@@ -3474,13 +3474,13 @@ const THUBApp = () => {
 
                 {/* Location */}
                 <div className="mb-4">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Ð›Ð¾ÐºÐ°Ñ†Ð¸Ñ</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Локация</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'delt', label: 'ðŸ’ª Ð”ÐµÐ»Ñ‚Ð¾Ð¸Ð´' },
-                      { id: 'quad', label: 'ðŸ¦µ Ð‘ÐµÐ´Ñ€Ð¾' },
-                      { id: 'glute', label: 'ðŸ‘ Ð“Ð»ÑƒÑ‚ÐµÑƒÑ' },
-                      { id: 'abdomen', label: 'â­• ÐšÐ¾Ñ€ÐµÐ¼' }
+                      { id: 'delt', label: '💪 Делтоид' },
+                      { id: 'quad', label: '🦵 Бедро' },
+                      { id: 'glute', label: '🍑 Глутеус' },
+                      { id: 'abdomen', label: '⭕ Корем' }
                     ].map(loc => (
                       <button
                         key={loc.id}
@@ -3499,7 +3499,7 @@ const THUBApp = () => {
 
                 {/* Side */}
                 <div className="mb-4">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Ð¡Ñ‚Ñ€Ð°Ð½Ð°</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Страна</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setLogSide('left')}
@@ -3509,7 +3509,7 @@ const THUBApp = () => {
                       }}
                       className="py-3 border rounded-xl text-white font-medium"
                     >
-                      Ð›ÑÐ²Ð¾
+                      Ляво
                     </button>
                     <button
                       onClick={() => setLogSide('right')}
@@ -3519,14 +3519,14 @@ const THUBApp = () => {
                       }}
                       className="py-3 border rounded-xl text-white font-medium"
                     >
-                      Ð”ÑÑÐ½Ð¾
+                      Дясно
                     </button>
                   </div>
                 </div>
 
                 {/* Dose */}
                 <div className="mb-4">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Ð”Ð¾Ð·Ð° (ÐµÐ´Ð¸Ð½Ð¸Ñ†Ð¸)</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Доза (единици)</label>
                   <input
                     type="number"
                     value={logDose}
@@ -3538,12 +3538,12 @@ const THUBApp = () => {
 
                 {/* Note */}
                 <div className="mb-5">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Ð‘ÐµÐ»ÐµÐ¶ÐºÐ° (Ð¾Ð¿Ñ†Ð¸Ð¾Ð½Ð°Ð»Ð½Ð¾)</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Бележка (опционално)</label>
                   <input
                     type="text"
                     value={logNote}
                     onChange={(e) => setLogNote(e.target.value)}
-                    placeholder="PIP, ÑÐ¸Ð½Ð¸Ð½Ð°, ÑÐ¼ÐµÐ½ÐµÐ½ Ñ„Ð»Ð°ÐºÐ¾Ð½..."
+                    placeholder="PIP, синина, сменен флакон..."
                     style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
                     className="w-full p-3 border rounded-xl text-sm placeholder-slate-500"
                   />
@@ -3553,13 +3553,13 @@ const THUBApp = () => {
               <>
                 {/* Miss Reason */}
                 <div className="mb-4">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">ÐŸÑ€Ð¸Ñ‡Ð¸Ð½Ð°</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Причина</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'forgot', label: 'Ð—Ð°Ð±Ñ€Ð°Ð²Ð¸Ñ…' },
-                      { id: 'no_access', label: 'ÐÑÐ¼Ð°Ñ… Ð´Ð¾ÑÑ‚ÑŠÐ¿' },
-                      { id: 'sick', label: 'Ð‘Ð¾Ð»ÐµÐ½' },
-                      { id: 'other', label: 'Ð”Ñ€ÑƒÐ³Ð°' }
+                      { id: 'forgot', label: 'Забравих' },
+                      { id: 'no_access', label: 'Нямах достъп' },
+                      { id: 'sick', label: 'Болен' },
+                      { id: 'other', label: 'Друга' }
                     ].map(r => (
                       <button
                         key={r.id}
@@ -3578,12 +3578,12 @@ const THUBApp = () => {
 
                 {/* Note */}
                 <div className="mb-5">
-                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Ð‘ÐµÐ»ÐµÐ¶ÐºÐ° (Ð¾Ð¿Ñ†Ð¸Ð¾Ð½Ð°Ð»Ð½Ð¾)</label>
+                  <label style={{ color: '#94a3b8' }} className="block text-sm mb-2">Бележка (опционално)</label>
                   <input
                     type="text"
                     value={logNote}
                     onChange={(e) => setLogNote(e.target.value)}
-                    placeholder="Ð”Ð¾Ð¿ÑŠÐ»Ð½Ð¸Ñ‚ÐµÐ»Ð½Ð° Ð¸Ð½Ñ„Ð¾Ñ€Ð¼Ð°Ñ†Ð¸Ñ..."
+                    placeholder="Допълнителна информация..."
                     style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
                     className="w-full p-3 border rounded-xl text-sm placeholder-slate-500"
                   />
@@ -3601,7 +3601,7 @@ const THUBApp = () => {
                 style={{ backgroundColor: '#1e293b', color: '#94a3b8' }}
                 className="flex-1 py-3 rounded-xl font-medium"
               >
-                ÐžÑ‚ÐºÐ°Ð·
+                Отказ
               </button>
               {pendingLogDay && injections[pendingLogDay] && (
                 <button
@@ -3613,7 +3613,7 @@ const THUBApp = () => {
                   style={{ backgroundColor: '#7f1d1d', color: '#fca5a5' }}
                   className="py-3 px-4 rounded-xl font-medium"
                 >
-                  ðŸ—‘ï¸
+                  🗑️
                 </button>
               )}
               <button
@@ -3624,7 +3624,7 @@ const THUBApp = () => {
                 }}
                 className="flex-1 py-3 rounded-xl text-white font-medium"
               >
-                {logStatus === 'done' ? 'âœ“ Ð—Ð°Ð¿Ð¸ÑˆÐ¸' : 'âš ï¸ ÐœÐ°Ñ€ÐºÐ¸Ñ€Ð°Ð¹'}
+                {logStatus === 'done' ? '✓ Запиши' : '⚠️ Маркирай'}
               </button>
             </div>
           </div>
@@ -3637,11 +3637,11 @@ const THUBApp = () => {
         className="fixed bottom-0 left-0 right-0 border-t px-2 py-2 flex justify-around"
       >
         {[
-          { id: 'today', icon: 'ðŸ ', label: 'Ð”Ð½ÐµÑ' },
-          { id: 'calendar', icon: 'ðŸ“…', label: 'ÐšÐ°Ð»ÐµÐ½Ð´Ð°Ñ€' },
-          { id: 'stats', icon: 'ðŸ“‹', label: 'ÐŸÑ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð»' },
-          { id: 'journal', icon: 'ðŸ“', label: 'Ð–ÑƒÑ€Ð½Ð°Ð»' },
-          { id: 'settings', icon: 'âš™ï¸', label: 'ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸' },
+          { id: 'today', icon: '🏠', label: 'Днес' },
+          { id: 'calendar', icon: '📅', label: 'Календар' },
+          { id: 'stats', icon: '📋', label: 'Протокол' },
+          { id: 'journal', icon: '📝', label: 'Журнал' },
+          { id: 'settings', icon: '⚙️', label: 'Настройки' },
         ].map(tab => (
           <button
             key={tab.id}
