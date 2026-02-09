@@ -2047,7 +2047,12 @@ const THUBApp = () => {
     return uRounded;
   };
 
-  const todayIsInjectionDay = isInjectionDayForProto(today, proto);
+  const todayIsInjectionDay = isInjectionDayForProto(today, getProtocolForDate(today));
+
+  // Протоколът който РЕАЛНО важи за днес (може да е различен от proto ако новият важи от бъдеща дата)
+  const todayProto = getProtocolForDate(today);
+  const todayCompound = compounds.find(c => c.id === todayProto.compound) || compounds[0];
+  const todayFreq = frequenciesData.find(f => f.id === todayProto.frequency) || frequenciesData[1];
 
   const todayEntry = injections[todayKey];
   const todayDone = todayEntry && (todayEntry.status === 'done' || !todayEntry.status);
@@ -2226,13 +2231,13 @@ const THUBApp = () => {
     return schedule[injectionIndex % schedule.length];
   };
 
-  const todayDose = getDoseForProto(today, proto) || unitsRounded;
+  const todayDose = getDoseForProto(today, todayProto) || Math.round((todayProto.weeklyDose / todayFreq.perWeek / todayCompound.concentration * 100) / todayProto.graduation) * todayProto.graduation;
 
   // Syringe component for main view - with logo inside
   const SyringeMain = ({ units }) => {
-    const maxUnits = proto.graduation === 1 ? 50 : 100;
+    const maxUnits = todayProto.graduation === 1 ? 50 : 100;
     const displayUnits = Math.min(units, maxUnits);
-    const ticks = proto.graduation === 2
+    const ticks = todayProto.graduation === 2
       ? Array.from({ length: 51 }, (_, i) => i * 2)
       : Array.from({ length: 51 }, (_, i) => i);
 
@@ -2294,7 +2299,7 @@ const THUBApp = () => {
           />
         </div>
         <div style={{ color: '#64748b' }} className="text-center text-xs mt-2">
-          {proto.graduation}U = {(proto.graduation * compound.concentration / 100).toFixed(1)} {compound.unit}
+          {todayProto.graduation}U = {(todayProto.graduation * todayCompound.concentration / 100).toFixed(1)} {todayCompound.unit}
         </div>
       </div>
     );
@@ -2406,7 +2411,7 @@ const THUBApp = () => {
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                   className="border rounded-2xl p-8"
                 >
-                  <div className="flex items-start justify-center gap-8">
+                  <div className="flex items-center justify-center gap-8">
                     <div>
                       {/* Date above syringe, aligned with THUB */}
                       <div className="text-center mb-2">
@@ -2426,7 +2431,7 @@ const THUBApp = () => {
                         {todayDose}U
                       </p>
                       <div style={{ color: '#64748b' }} className="text-sm mt-2 space-y-1">
-                        <p>{((todayDose / 100) * compound.concentration).toFixed(1)} {compound.unit}</p>
+                        <p>{((todayDose / 100) * todayCompound.concentration).toFixed(1)} {todayCompound.unit}</p>
                         <p>{(todayDose / 100).toFixed(2)} mL</p>
                       </div>
                     </div>
@@ -2604,7 +2609,7 @@ const THUBApp = () => {
 
                 {/* Optimization в Today */}
                 {(() => {
-                  const isEOD = proto.frequency === 'EOD';
+                  const isEOD = todayProto.frequency === 'EOD';
                   const cycleDays = isEOD ? 14 : 7;
                   const todayDate = new Date();
                   const todayDayOfWeek = todayDate.getDay();
@@ -2617,8 +2622,8 @@ const THUBApp = () => {
                   for (let i = 0; i < cycleDays; i++) {
                     const dayDate = new Date(mondayOfWeek);
                     dayDate.setDate(mondayOfWeek.getDate() + i);
-                    const isInjDay = isInjectionDayForProto(dayDate, proto);
-                    const dose = isInjDay ? (getDoseForProto(dayDate, proto) || unitsRounded) : 0;
+                    const isInjDay = isInjectionDayForProto(dayDate, todayProto);
+                    const dose = isInjDay ? (getDoseForProto(dayDate, todayProto) || todayDose) : 0;
                     const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
                     const entry = injections[dayKey];
                     const isDone = entry && (entry.status === 'done' || !entry.status);
@@ -2630,7 +2635,7 @@ const THUBApp = () => {
                   }
                   
                   const cycleInjections = cycleData.filter(d => d.isInjDay);
-                  const cycleTotalMg = cycleInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
+                  const cycleTotalMg = cycleInjections.reduce((sum, d) => sum + (d.dose / 100 * todayCompound.concentration), 0);
                   const weeklyMg = isEOD ? cycleTotalMg / 2 : cycleTotalMg;
                   const doseCounts = {};
                   cycleInjections.forEach(d => { doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1; });
