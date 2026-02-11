@@ -1,89 +1,257 @@
-import { useState, useEffect, Component } from 'react';
+import { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
-// Data
-import {
-    compounds,
-    frequencies,
-    compoundNames,
-    frequencyNames,
-    sourceLabels,
-    oilLabels,
-    methodLabels,
-    monthNames,
-    dayNames
-} from './data/constants';
-
-// Utils - localStorage + Supabase
-import {
-    loadFromStorage,
-    saveToStorage,
-    migrateProfile,
-    authSignUp,
-    authSignIn,
-    authSignOut,
-    authResetPassword,
-    authGetSession,
-    authOnChange,
-    dbLoadProfile,
-    dbSaveProfile,
-    dbLoadProtocol,
-    dbSaveProtocol,
-    dbLoadAllProtocols,
-    dbLoadInjections,
-    dbSaveInjection,
-    dbDeleteInjection,
-    dbSaveProtocolHistory
-} from './utils/storage';
-
-import {
-    getPkParameters,
-    generatePkData,
-    calculateStabilityWithRange
-} from './utils/calculations';
-
-// Error Boundary to catch and display crashes
-class ErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ backgroundColor: '#0a1628', color: '#f87171', minHeight: '100vh', padding: '2rem' }}>
-          <h2 style={{ color: '#fbbf24', fontSize: '1.5rem', marginBottom: '1rem' }}>⚠️ THUB Error</h2>
-          <pre style={{ color: '#94a3b8', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-            {this.state.error?.message}
-            {'\n\n'}
-            {this.state.error?.stack}
-          </pre>
-          <button 
-            onClick={() => { localStorage.clear(); window.location.reload(); }}
-            style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}
-          >
-            Reset App & Reload
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-
 const THUBApp = () => {
+  // ============ STORAGE (localStorage for local/production) ============
+  const loadFromStorage = (key, defaultValue) => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
 
-  // ============ SUPABASE AUTH STATE ============
-  const [userId, setUserId] = useState(null);
-  const [protocolDbId, setProtocolDbId] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState('');
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmailSent, setResetEmailSent] = useState(false);
+  const saveToStorage = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  };
+
+  // ============ MIGRATION ============
+  const migrateCompoundId = (oldId) => {
+    const migrations = {
+      'test_c_e_200': 'test_e_200',
+      'test_c_e_250': 'test_e_250',
+    };
+    return migrations[oldId] || oldId;
+  };
+
+  const migrateProfile = (saved) => {
+    if (!saved) return saved;
+    if (saved.protocol && saved.protocol.compound) {
+      const newCompoundId = migrateCompoundId(saved.protocol.compound);
+      if (newCompoundId !== saved.protocol.compound) {
+        saved.protocol.compound = newCompoundId;
+        saveToStorage('thub-profile', saved);
+      }
+    }
+    // Migrate to protocolVersions
+    if (saved.protocol && !saved.protocolVersions) {
+      saved.protocolVersions = [{
+        ...saved.protocol,
+        effectiveFrom: saved.protocol.startDate,
+        createdAt: saved.lastModified || new Date().toISOString(),
+        note: null
+      }];
+      saveToStorage('thub-profile', saved);
+    }
+    return saved;
+  };
+
+  // ============ PK PARAMETERS ============
+  // Pharmacokinetic parameters based on ester, method, oil, site, volume
+  const getPkParameters = (compoundId, method, oilType, site, volumeMl) => {
+    // Base parameters by ester
+    const esterParams = {
+      'test_p': { 
+        halfLife: { min: 0.8, base: 1.0, max: 1.2 },
+        tmax: { min: 0.5, base: 0.75, max: 1.0 }
+      },
+      'test_e': { 
+        halfLife: { min: 4.0, base: 4.5, max: 5.0 },
+        tmax: { min: 1.0, base: 1.5, max: 2.0 }
+      },
+      'test_c': { 
+        halfLife: { min: 5.0, base: 5.5, max: 6.0 },
+        tmax: { min: 1.5, base: 2.0, max: 2.5 }
+      },
+      'hcg': { 
+        halfLife: { min: 1.0, base: 1.5, max: 2.0 },
+        tmax: { min: 0.5, base: 1.0, max: 1.5 }
+      },
+      'test_u': { 
+        halfLife: { min: 18.0, base: 21.0, max: 24.0 },
+        tmax: { min: 5.0, base: 7.0, max: 9.0 }
+      },
+    };
+
+    // Method modifiers (affects absorption rate)
+    const methodModifier = {
+      'im': { absorption: 1.0, bioavailability: 0.70 },
+      'subq': { absorption: 1.12, bioavailability: 0.82 },
+    };
+
+    // Oil type modifiers
+    const oilModifier = {
+      'mct': 0.95,        // 5% faster
+      'grape_seed': 1.0,  // baseline
+      'sesame': 1.05,     // 5% slower
+      'castor': 1.10,     // 10% slower
+      'other': 1.0,
+      'unknown': 1.0,
+    };
+
+    // Site modifiers
+    const siteModifier = {
+      'glute': 1.08,      // larger muscle, slower
+      'delt': 1.0,        // baseline
+      'quad': 1.02,       // slightly slower
+      'abdomen': 1.12,    // SubQ typical site, slower
+    };
+
+    // Volume modifier
+    const getVolumeModifier = (ml) => {
+      if (ml < 0.3) return 0.95;   // faster absorption
+      if (ml > 0.5) return 1.08;   // slower absorption
+      return 1.0;
+    };
+
+    // Determine ester from compound ID
+    let esterKey = 'test_e'; // default
+    if (compoundId.includes('test_p') || compoundId.includes('prop')) esterKey = 'test_p';
+    else if (compoundId.includes('test_c') || compoundId.includes('cyp')) esterKey = 'test_c';
+    else if (compoundId.includes('test_u') || compoundId.includes('undec')) esterKey = 'test_u';
+    else if (compoundId.includes('test_e') || compoundId.includes('enan')) esterKey = 'test_e';
+    else if (compoundId.includes('hcg')) esterKey = 'hcg';
+
+    const ester = esterParams[esterKey] || esterParams['test_e'];
+    const methodMod = methodModifier[method] || methodModifier['im'];
+    const oilMod = oilModifier[oilType] || 1.0;
+    const siteMod = siteModifier[site] || 1.0;
+    const volMod = getVolumeModifier(volumeMl);
+
+    // Calculate adjusted parameters
+    const totalAbsorptionMod = methodMod.absorption * oilMod * siteMod * volMod;
+    
+    return {
+      halfLife: {
+        min: ester.halfLife.min * totalAbsorptionMod,
+        base: ester.halfLife.base * totalAbsorptionMod,
+        max: ester.halfLife.max * totalAbsorptionMod,
+      },
+      tmax: {
+        min: ester.tmax.min * totalAbsorptionMod,
+        base: ester.tmax.base * totalAbsorptionMod,
+        max: ester.tmax.max * totalAbsorptionMod,
+      },
+      bioavailability: methodMod.bioavailability,
+      modifiers: {
+        method: method === 'subq' ? 'SubQ' : 'IM',
+        oil: oilType !== 'unknown' ? oilType.toUpperCase().replace('_', ' ') : null,
+        site: site,
+      }
+    };
+  };
+
+  // Generate PK curve data with optional band (min/max)
+  const generatePkData = (pkParams, dose, frequency, days = 42, withBand = false) => {
+    const calculate = (halfLife, tmax, bio) => {
+      const ka = Math.log(2) / (tmax / 3);
+      const ke = Math.log(2) / halfLife;
+      const data = [];
+      const pointsPerDay = 12; // 12 points per day = every 2 hours
+      
+      const injectionInterval = frequency === 'ED' ? 1 : 
+                                frequency === 'EOD' ? 2 : 
+                                frequency === '3xW' ? 7/3 : 
+                                frequency === '1xW' ? 7 :
+                                frequency === '1x2W' ? 14 : 3.5;
+      
+      for (let i = 0; i <= days * pointsPerDay; i++) {
+        const t = i / pointsPerDay;
+        let concentration = 0;
+        
+        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
+          const injDay = injNum * injectionInterval;
+          const timeSinceInj = t - injDay;
+          if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
+            const d = dose * bio;
+            const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
+            concentration += Math.max(0, c);
+          }
+        }
+        
+        data.push({ day: t, concentration });
+      }
+      return data;
+    };
+
+    const baseData = calculate(pkParams.halfLife.base, pkParams.tmax.base, pkParams.bioavailability);
+    
+    // Find peak in steady state (days 28-42) for normalization
+    const steadyStateData = baseData.filter(d => d.day >= 28);
+    const peakConc = Math.max(...steadyStateData.map(d => d.concentration));
+    
+    // Normalize to 0-100% (no rounding for smooth curve)
+    const normalizedData = baseData.map(d => ({
+      day: d.day,
+      percent: peakConc > 0 ? (d.concentration / peakConc) * 100 : 0,
+    }));
+
+    if (withBand) {
+      const minData = calculate(pkParams.halfLife.min, pkParams.tmax.min, pkParams.bioavailability);
+      const maxData = calculate(pkParams.halfLife.max, pkParams.tmax.max, pkParams.bioavailability);
+      
+      // Find peaks for each
+      const minPeak = Math.max(...minData.filter(d => d.day >= 28).map(d => d.concentration));
+      const maxPeak = Math.max(...maxData.filter(d => d.day >= 28).map(d => d.concentration));
+      
+      return normalizedData.map((d, i) => ({
+        ...d,
+        percentMin: minPeak > 0 ? (minData[i].concentration / minPeak) * 100 : 0,
+        percentMax: maxPeak > 0 ? (maxData[i].concentration / maxPeak) * 100 : 0,
+      }));
+    }
+
+    return normalizedData;
+  };
+
+  // Calculate stability with range
+  const calculateStabilityWithRange = (pkParams, dose, frequency) => {
+    const calculateForParams = (halfLife, tmax, bio) => {
+      const ka = Math.log(2) / (tmax / 3);
+      const ke = Math.log(2) / halfLife;
+      const injectionInterval = frequency === 'ED' ? 1 : 
+                                frequency === 'EOD' ? 2 : 
+                                frequency === '3xW' ? 7/3 : 
+                                frequency === '1xW' ? 7 :
+                                frequency === '1x2W' ? 14 : 3.5;
+      
+      const concentrations = [];
+      const pointsPerDay = 24; // More points for accurate peak/trough detection
+      for (let i = 28 * pointsPerDay; i <= 42 * pointsPerDay; i++) {
+        const t = i / pointsPerDay;
+        let concentration = 0;
+        
+        for (let injNum = 0; injNum <= Math.floor(t / injectionInterval); injNum++) {
+          const injDay = injNum * injectionInterval;
+          const timeSinceInj = t - injDay;
+          if (timeSinceInj >= 0 && timeSinceInj < halfLife * 10) {
+            const d = dose * bio;
+            const c = d * (ka / (ka - ke)) * (Math.exp(-ke * timeSinceInj) - Math.exp(-ka * timeSinceInj));
+            concentration += Math.max(0, c);
+          }
+        }
+        concentrations.push(concentration);
+      }
+      
+      const peak = Math.max(...concentrations);
+      const trough = Math.min(...concentrations);
+      const fluctuation = peak > 0 ? ((peak - trough) / peak) * 100 : 0;
+      return { stability: Math.round(100 - fluctuation), fluctuation: Math.round(fluctuation), troughPercent: Math.round((trough / peak) * 100) };
+    };
+
+    const base = calculateForParams(pkParams.halfLife.base, pkParams.tmax.base, pkParams.bioavailability);
+    const min = calculateForParams(pkParams.halfLife.min, pkParams.tmax.min, pkParams.bioavailability);
+    const max = calculateForParams(pkParams.halfLife.max, pkParams.tmax.max, pkParams.bioavailability);
+
+    return {
+      stability: { min: Math.min(min.stability, max.stability), base: base.stability, max: Math.max(min.stability, max.stability) },
+      fluctuation: { min: Math.min(min.fluctuation, max.fluctuation), base: base.fluctuation, max: Math.max(min.fluctuation, max.fluctuation) },
+      troughPercent: { min: Math.min(min.troughPercent, max.troughPercent), base: base.troughPercent, max: Math.max(min.troughPercent, max.troughPercent) },
+    };
+  };
 
   // ============ STATE ============
   const [currentStep, setCurrentStep] = useState(() => {
@@ -197,195 +365,31 @@ const THUBApp = () => {
   const [logDose, setLogDose] = useState(0);
   const [logNote, setLogNote] = useState('');
   const [logMissReason, setLogMissReason] = useState('');
-  const [autoMissRan, setAutoMissRan] = useState(false);
-
-  // === JOURNAL: Morning Pulse ===
-  const [journalEntries, setJournalEntries] = useState(() => loadFromStorage('thub-journal', {}));
-  const [pulseOpen, setPulseOpen] = useState(false);
-
-  const getTodayJournalKey = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  };
-
-  const todayPulse = journalEntries[getTodayJournalKey()]?.morning_pulse || {};
-
-  const setPulseAnswer = (field, value) => {
-    const key = getTodayJournalKey();
-    const newValue = journalEntries[key]?.morning_pulse?.[field] === value ? null : value;
-    const updated = {
-      ...journalEntries[key]?.morning_pulse,
-      [field]: newValue,
-      timestamp: new Date().toISOString()
-    };
-    setJournalEntries(prev => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        morning_pulse: updated
-      }
-    }));
-    // Auto-close when both answered
-    const otherField = field === 'erection' ? 'wakeup' : 'erection';
-    if (newValue && updated[otherField]) {
-      setPulseOpen(false);
-    }
-  };
-
-  // Save journal when changed
-  useEffect(() => {
-    saveToStorage('thub-journal', journalEntries);
-  }, [journalEntries]);
-
-  // Open pulse automatically if no answers yet today
-  useEffect(() => {
-    const pulse = journalEntries[getTodayJournalKey()]?.morning_pulse;
-    if (!pulse || (!pulse.erection && !pulse.wakeup)) {
-      setPulseOpen(true);
-    }
-  }, []);
   // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
-    // Supabase sync
-    if (userId && Object.keys(injections).length > 0) {
-      const syncToSupabase = async () => {
-        for (const [dateKey, data] of Object.entries(injections)) {
-          if (data) {
-            await dbSaveInjection(userId, protocolDbId, dateKey, data);
-          }
-        }
-      };
-      syncToSupabase().catch(console.error);
-    }
   }, [injections]);
 
-  // Auto-miss on load: mark past unlogged injection days as MISSED
-  useEffect(() => {
-    if (autoMissRan || !profile.protocolConfigured || !profile.protocol) return;
-    setAutoMissRan(true);
-    
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const hour = new Date().getHours();
-    
-    const versions = profile.protocolVersions || [];
-    const proto = profile.protocol;
-    
-    // Inline isInjectionDay check (can't use the function as it's defined later)
-    const checkIsInjDay = (date) => {
-      // Find protocol version for date
-      let p = proto;
-      if (versions.length > 0) {
-        const checkD = new Date(date);
-        checkD.setHours(0, 0, 0, 0);
-        const sorted = [...versions].sort((a, b) => new Date(b.effectiveFrom) - new Date(a.effectiveFrom));
-        for (const v of sorted) {
-          const effDate = new Date(v.effectiveFrom);
-          effDate.setHours(0, 0, 0, 0);
-          if (effDate <= checkD) { p = v; break; }
-        }
-        if (p === proto && sorted.length > 0) p = sorted[sorted.length - 1];
-      }
-      
-      const dayOfWeek = date.getDay();
-      const startDate = new Date(p.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      const checkDate2 = new Date(date);
-      checkDate2.setHours(0, 0, 0, 0);
-      const daysDiff = Math.floor((checkDate2 - startDate) / (1000 * 60 * 60 * 24));
-      
-      if (p.frequency === 'ED') return true;
-      if (p.frequency === 'EOD') return daysDiff >= 0 ? daysDiff % 2 === 0 : Math.abs(daysDiff) % 2 === 0;
-      if (p.frequency === '2xW') return dayOfWeek === 1 || dayOfWeek === 4;
-      if (p.frequency === '3xW') return dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
-      return false;
-    };
-    
-    const updated = { ...injections };
-    let changed = false;
-    
-    const startDay = (hour >= 22) ? 0 : 1;
-    
-    for (let i = startDay; i <= 7; i++) {
-      const checkDate = new Date(todayDate);
-      checkDate.setDate(checkDate.getDate() - i);
-      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
-      
-      if (updated[dateKey]) continue;
-      if (!checkIsInjDay(checkDate)) continue;
-      
-      updated[dateKey] = { status: 'missed' };
-      changed = true;
-    }
-    
-    if (changed) {
-      setInjections(updated);
-    }
-  }, [profile.protocolConfigured, autoMissRan]);
-
-  // ============ SUPABASE SESSION CHECK ============
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const session = await authGetSession();
-        if (session?.user) {
-          setUserId(session.user.id);
-          const dbProfile = await dbLoadProfile(session.user.id);
-          const dbProtocol = await dbLoadProtocol(session.user.id);
-          const dbAllProtocols = await dbLoadAllProtocols(session.user.id);
-          const dbInj = await dbLoadInjections(session.user.id);
-          
-          if (dbProfile) {
-            const loadedProfile = {
-              name: dbProfile.name || '',
-              email: dbProfile.email || '',
-              protocolConfigured: dbProfile.protocol_configured || false,
-            };
-            
-            if (dbProtocol) {
-              loadedProfile.protocol = dbProtocol;
-              loadedProfile.protocolConfigured = true;
-              loadedProfile.protocolVersions = dbAllProtocols;
-              setProtocolData(dbProtocol);
-              if (dbProtocol._dbId) setProtocolDbId(dbProtocol._dbId);
-            }
-            
-            if (dbInj && Object.keys(dbInj).length > 0) {
-              setInjections(dbInj);
-              saveToStorage('thub-injections', dbInj);
-            }
-            
-            setProfile(loadedProfile);
-            saveToStorage('thub-profile', loadedProfile);
-            
-            if (loadedProfile.protocolConfigured) {
-              setCurrentStep('main');
-              setActiveTab('today');
-            } else {
-              setCurrentStep('protocol');
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Session check error:', err);
-      } finally {
-        setAuthLoading(false);
-      }
-    };
-    checkSession();
-    
-    const { data: { subscription } } = authOnChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setUserId(null);
-        setCurrentStep('onboarding');
-      }
-    });
-    
-    return () => subscription.unsubscribe();
-  }, []);
-
   // ============ PROTOCOL CHANGE DETECTION ============
+  const compoundNames = {
+    'test_c_200': 'Testosterone Cypionate 200mg/mL',
+    'test_e_200': 'Testosterone Enanthate 200mg/mL',
+    'test_e_250': 'Testosterone Enanthate 250mg/mL',
+    'test_c_250': 'Testosterone Cypionate 250mg/mL',
+    'test_p_100': 'Testosterone Propionate 100mg/mL',
+    'test_u_250': 'Testosterone Undecanoate 250mg/mL',
+    'hcg': 'HCG 5000IU / 5mL',
+  };
+
+  const frequencyNames = {
+    'ED': 'Всеки ден',
+    'EOD': 'През ден',
+    '3xW': '3× седмично',
+    '2xW': '2× седмично',
+    '1xW': '1× седмично',
+    '1x2W': '1× на 2 седмици',
+  };
+
   const detectProtocolChanges = (oldProto, newProto) => {
     if (!oldProto) return [];
     
@@ -490,18 +494,14 @@ const THUBApp = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-
-  // Reset function - Supabase logout
-  const resetApp = async () => {
+  // Reset function
+  const resetApp = () => {
     try {
-      await authSignOut();
+      localStorage.removeItem('thub-profile');
+      localStorage.removeItem('thub-injections');
     } catch (e) {}
-    localStorage.removeItem('thub-profile');
-    localStorage.removeItem('thub-injections');
-    setUserId(null);
     window.location.reload();
   };
-
 
   // ============ DEMO MODE ============
   const loadDemo = () => {
@@ -547,107 +547,47 @@ const THUBApp = () => {
   };
 
   // ============ ACTIONS ============
-  const handleOnboardingSubmit = async () => {
-    setAuthError('');
-    
+  const handleOnboardingSubmit = () => {
     if (authMode === 'signup') {
+      // SIGN UP - create new profile
       if (validateOnboarding()) {
-        setAuthLoading(true);
-        const { data, error } = await authSignUp(
-          formData.email.trim(),
-          formData.password,
-          formData.name.trim()
-        );
+        const newProfile = {
+          ...profile,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          rememberMe: true,
+          createdAt: new Date().toISOString()
+        };
+        setProfile(newProfile);
+        saveToStorage('thub-profile', newProfile);
+        setCurrentStep('protocol');
+      }
+    } else {
+      // SIGN IN - validate and enter
+      if (validateOnboarding()) {
+        // Зареждаме от storage за да сме сигурни че имаме актуални данни
+        const savedProfile = loadFromStorage('thub-profile', null);
         
-        if (error) {
-          setAuthError(error);
-          setAuthLoading(false);
-          return;
-        }
+        const updatedProfile = {
+          ...savedProfile,
+          rememberMe: formData.rememberMe || false,
+          password: formData.rememberMe ? formData.password : ''
+        };
+        setProfile(updatedProfile);
+        saveToStorage('thub-profile', updatedProfile);
         
-        if (data?.user) {
-          setUserId(data.user.id);
-          const newProfile = {
-            name: formData.name.trim(),
-            email: formData.email.trim(),
-            protocolConfigured: false,
-            createdAt: new Date().toISOString()
-          };
-          setProfile(newProfile);
-          saveToStorage('thub-profile', newProfile);
+        // Проверяваме saved данните, не state-а
+        if (savedProfile && savedProfile.protocolConfigured && savedProfile.protocol) {
+          setProtocolData(savedProfile.protocol); // Зареждаме запазения протокол
+          setActiveTab('today'); // Отиваме в "Днес" таб
+          setCurrentStep('main');
+        } else {
           setCurrentStep('protocol');
         }
-        setAuthLoading(false);
-      }
-    } else {
-      if (validateOnboarding()) {
-        setAuthLoading(true);
-        const { data, error } = await authSignIn(
-          formData.email.trim(),
-          formData.password
-        );
-        
-        if (error) {
-          setAuthError(error);
-          setAuthLoading(false);
-          return;
-        }
-        
-        if (data?.user) {
-          setUserId(data.user.id);
-          const dbProfile = await dbLoadProfile(data.user.id);
-          const dbProtocol = await dbLoadProtocol(data.user.id);
-          const dbAllProtocols = await dbLoadAllProtocols(data.user.id);
-          const dbInj = await dbLoadInjections(data.user.id);
-          
-          const loadedProfile = {
-            name: dbProfile?.name || formData.email.trim(),
-            email: formData.email.trim(),
-            protocolConfigured: false,
-          };
-          
-          if (dbProtocol) {
-            loadedProfile.protocol = dbProtocol;
-            loadedProfile.protocolConfigured = true;
-            loadedProfile.protocolVersions = dbAllProtocols;
-            setProtocolData(dbProtocol);
-            if (dbProtocol._dbId) setProtocolDbId(dbProtocol._dbId);
-          }
-          
-          if (dbInj && Object.keys(dbInj).length > 0) {
-            setInjections(dbInj);
-            saveToStorage('thub-injections', dbInj);
-          }
-          
-          setProfile(loadedProfile);
-          saveToStorage('thub-profile', loadedProfile);
-          
-          if (loadedProfile.protocolConfigured) {
-            setActiveTab('today');
-            setCurrentStep('main');
-          } else {
-            setCurrentStep('protocol');
-          }
-        }
-        setAuthLoading(false);
       }
     }
   };
-
-  const handleForgotPassword = async () => {
-    if (!formData.email || !formData.email.includes('@')) {
-      setAuthError('Въведи имейл адрес');
-      return;
-    }
-    const { error } = await authResetPassword(formData.email.trim());
-    if (error) {
-      setAuthError(error);
-    } else {
-      setResetEmailSent(true);
-      setAuthError('');
-    }
-  };
-
 
   const handleProtocolSubmit = () => {
     // Ако вече има запазен протокол, проверяваме за промени
@@ -705,22 +645,25 @@ const THUBApp = () => {
     return getNextInjectionDateFromToday(); // 'next'
   };
 
-
-  const saveProtocol = async (reason = null) => {
+  const saveProtocol = (reason = null) => {
     const now = new Date().toISOString();
     
     let newVersions = profile.protocolVersions || [];
     
     if (reason && profile.protocol) {
+      // Versioned save — добавяме нова версия
       const effectiveFrom = getEffectiveDate();
+      
       const newVersion = {
         ...protocolData,
         effectiveFrom: effectiveFrom,
         createdAt: now,
         note: reason
       };
+      
       newVersions = [...newVersions, newVersion];
     } else if (!profile.protocolConfigured) {
+      // First-time save — създаваме първата версия
       newVersions = [{
         ...protocolData,
         effectiveFrom: protocolData.startDate,
@@ -729,6 +672,7 @@ const THUBApp = () => {
       }];
     }
     
+    // Подготвяме history entry за backwards compat
     let newHistory = profile.protocolHistory || [];
     if (reason && profile.protocol) {
       const historyEntry = {
@@ -754,26 +698,11 @@ const THUBApp = () => {
     
     setProfile(newProfile);
     saveToStorage('thub-profile', newProfile);
-    
-    // === SUPABASE SYNC ===
-    if (userId) {
-      await dbSaveProfile(userId, { name: newProfile.name, email: newProfile.email, protocolConfigured: true });
-      const protocolToSave = { ...protocolData, effectiveFrom: reason ? getEffectiveDate() : protocolData.startDate, note: reason };
-      const { data: savedProto } = await dbSaveProtocol(userId, protocolToSave);
-      if (savedProto) setProtocolDbId(savedProto.id);
-      
-      if (reason && profile.protocol && savedProto) {
-        const changesStr = detectedChanges.map(c => `${c.field}: ${c.from} -> ${c.to}`).join(', ');
-        await dbSaveProtocolHistory(userId, savedProto.id, changesStr, reason, profile.protocol, protocolData);
-      }
-    }
-    
     setShowChangeModal(false);
     setDetectedChanges([]);
     setChangeReason('');
     setCurrentStep('main');
   };
-
 
   const cancelProtocolChange = () => {
     // Връщаме protocolData към оригиналния протокол
@@ -788,20 +717,6 @@ const THUBApp = () => {
   // ============ RENDER ============
   
   // Onboarding Screen
-
-  // Loading screen while checking auth
-  if (authLoading && !loadFromStorage('thub-profile', null)) {
-    return (
-      <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }} className="flex items-center justify-center">
-        <div className="text-center">
-          <div style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f' }} className="w-20 h-20 rounded-2xl border-2 flex items-center justify-center mb-4 mx-auto shadow-xl">
-            <span className="text-white text-lg font-black tracking-tight">THUB</span>
-          </div>
-          <p style={{ color: '#64748b' }}>Зареждане...</p>
-        </div>
-      </div>
-    );
-  }
   if (currentStep === 'onboarding') {
     return (
       <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }} className="flex flex-col lg:flex-row items-center justify-center p-6 lg:p-12 gap-6">
@@ -1008,32 +923,20 @@ const THUBApp = () => {
                 </div>
               )}
 
-
-              {/* Auth Error Display */}
-              {authError && (
-                <div style={{ backgroundColor: '#7f1d1d', borderColor: '#dc2626' }} className="border rounded-xl p-3">
-                  <p className="text-red-300 text-sm text-center">{authError}</p>
-                </div>
-              )}
-
               {/* Submit Button */}
               <button
                 onClick={handleOnboardingSubmit}
                 style={{ background: 'linear-gradient(90deg, #06b6d4, #14b8a6)' }}
                 className="w-full py-4 text-white font-semibold rounded-xl transition-all duration-300 shadow-lg hover:opacity-90 mt-2"
               >
-                {authLoading ? '...' : (authMode === 'signup' ? 'Create Account' : 'Sign In')}
+                {authMode === 'signup' ? 'Create Account' : 'Sign In'}
               </button>
 
               {/* Forgot password - signin only */}
               {authMode === 'signin' && (
-                <button
-                  onClick={handleForgotPassword}
-                  style={{ color: '#64748b' }}
-                  className="text-sm text-center w-full hover:text-cyan-400 transition-colors"
-                >
-                  {resetEmailSent ? '✉️ Изпратен е имейл за възстановяване' : 'Забравена парола?'}
-                </button>
+                <p style={{ color: '#64748b' }} className="text-sm text-center">
+                  Забравена парола?
+                </p>
               )}
             </div>
             
@@ -2003,6 +1906,39 @@ const THUBApp = () => {
 
   const missedInjection = hasMissedInjection();
 
+  // Auto-miss on load: mark past unlogged injection days as MISSED
+  const [autoMissRan, setAutoMissRan] = useState(false);
+  useEffect(() => {
+    if (autoMissRan || !profile.protocolConfigured) return;
+    setAutoMissRan(true);
+    
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const hour = new Date().getHours();
+    
+    const updated = { ...injections };
+    let changed = false;
+    
+    // Check last 7 days (not including today unless after 22:00)
+    const startDay = (hour >= 22) ? 0 : 1;
+    
+    for (let i = startDay; i <= 7; i++) {
+      const checkDate = new Date(todayDate);
+      checkDate.setDate(checkDate.getDate() - i);
+      const dateKey = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+      
+      if (updated[dateKey]) continue;
+      if (!isInjectionDay(checkDate)) continue;
+      
+      updated[dateKey] = { status: 'missed' };
+      changed = true;
+    }
+    
+    if (changed) {
+      setInjections(updated);
+    }
+  }, [profile.protocolConfigured, autoMissRan]);
+
   // Open log modal with defaults (or existing data for edit)
   const openLogModal = (dayKey, dayDose, isToday = false, existingData = null, defaultStatus = 'done') => {
     const now = new Date();
@@ -2148,23 +2084,6 @@ const THUBApp = () => {
 
   const todayDose = getDoseForDate(today) || unitsRounded;
 
-  // Намира следващата инжекция от утре нататък
-  const getNextInjection = () => {
-    for (let i = 1; i <= 30; i++) {
-      const checkDate = new Date(today);
-      checkDate.setDate(today.getDate() + i);
-      if (isInjectionDay(checkDate)) {
-        const dose = getDoseForDate(checkDate) || unitsRounded;
-        const dayName = dayNames[checkDate.getDay()];
-        const dateStr = `${checkDate.getDate().toString().padStart(2, '0')}/${(checkDate.getMonth() + 1).toString().padStart(2, '0')}`;
-        return { date: checkDate, dose, dayName, dateStr };
-      }
-    }
-    return null;
-  };
-
-  const nextInjection = getNextInjection();
-
   // Syringe component for main view - with logo inside
   const SyringeMain = ({ units }) => {
     const maxUnits = proto.graduation === 1 ? 50 : 100;
@@ -2231,7 +2150,7 @@ const THUBApp = () => {
           />
         </div>
         <div style={{ color: '#64748b' }} className="text-center text-xs mt-2">
-          {proto.graduation}U = {(proto.graduation * compound.concentration / 100).toFixed(1)} {compound.unit}
+          {actualMl.toFixed(2)} mL
         </div>
       </div>
     );
@@ -2240,9 +2159,6 @@ const THUBApp = () => {
   return (
     <div style={{ backgroundColor: '#0a1628', minHeight: '100vh' }} className="pb-24">
 
-      {/* Pulse animation */}
-      <style>{`@keyframes pulseBorder { 0% { border-color: #1e3a5f; } 50% { border-color: #0891b2; } 100% { border-color: #1e3a5f; } }`}</style>
-
       {/* Content */}
       <main className="p-4 pt-6">
         
@@ -2250,112 +2166,25 @@ const THUBApp = () => {
         {activeTab === 'today' && (
           <div className="space-y-4">
 
-            {/* === MORNING PULSE TOGGLE === */}
-            <button
-              onClick={() => setPulseOpen(!pulseOpen)}
-              style={{
-                backgroundColor: '#0f172a',
-                borderColor: '#1e3a5f',
-                borderRadius: pulseOpen ? '16px 16px 0 0' : '16px',
-                animation: (!todayPulse.erection && !todayPulse.wakeup && !pulseOpen) ? 'pulseBorder 2s ease-in-out infinite' : 'none',
-              }}
-              className="w-full border px-4 py-3 flex items-center justify-between"
-            >
-              <span style={{ color: '#94a3b8' }} className="text-sm font-medium">Сутрешен пулс</span>
-              <div className="flex items-center gap-2">
-                {!pulseOpen && todayPulse.erection && (
-                  <span style={{ 
-                    backgroundColor: `${todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626'}20`,
-                    border: `1px solid ${todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626'}`,
-                    color: todayPulse.erection === 'yes' ? '#059669' : todayPulse.erection === 'weak' ? '#d97706' : '#dc2626',
-                    padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 
-                  }}>
-                    {todayPulse.erection === 'yes' ? 'Да' : todayPulse.erection === 'weak' ? 'Слаба' : 'Не'}
-                  </span>
-                )}
-                {!pulseOpen && todayPulse.wakeup && (
-                  <span style={{ 
-                    backgroundColor: `${todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626'}20`,
-                    border: `1px solid ${todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626'}`,
-                    color: todayPulse.wakeup === 'fresh' ? '#059669' : todayPulse.wakeup === 'normal' ? '#d97706' : '#dc2626',
-                    padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 
-                  }}>
-                    {todayPulse.wakeup === 'fresh' ? 'Свеж' : todayPulse.wakeup === 'normal' ? 'Норм.' : 'Тежко'}
-                  </span>
-                )}
-                <span style={{ color: '#475569', transform: pulseOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} className="text-sm">â–¼</span>
-              </div>
-            </button>
-
-            {pulseOpen && (
-              <div
-                style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f', borderTop: 'none', borderRadius: '0 0 16px 16px', marginTop: 0 }}
-                className="border px-4 py-4 -mt-4"
-              >
-                <p className="text-white text-sm font-medium mb-2 text-center">Сутрешна ерекция?</p>
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  {[
-                    { id: 'yes', label: 'Да', color: '#059669' },
-                    { id: 'weak', label: 'Слаба', color: '#d97706' },
-                    { id: 'no', label: 'Не', color: '#dc2626' },
-                  ].map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => setPulseAnswer('erection', opt.id)}
-                      style={{
-                        backgroundColor: todayPulse.erection === opt.id ? opt.color : '#0a1628',
-                        borderColor: todayPulse.erection === opt.id ? opt.color : '#1e3a5f',
-                      }}
-                      className="border-2 rounded-xl py-3 text-white text-sm font-semibold"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-
-                <p className="text-white text-sm font-medium mb-2 text-center">Как се събуди?</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'fresh', label: 'Свеж', color: '#059669' },
-                    { id: 'normal', label: 'Нормално', color: '#d97706' },
-                    { id: 'heavy', label: 'Тежко', color: '#dc2626' },
-                  ].map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => setPulseAnswer('wakeup', opt.id)}
-                      style={{
-                        backgroundColor: todayPulse.wakeup === opt.id ? opt.color : '#0a1628',
-                        borderColor: todayPulse.wakeup === opt.id ? opt.color : '#1e3a5f',
-                      }}
-                      className="border-2 rounded-xl py-3 text-white text-sm font-semibold"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {todayIsInjectionDay ? (
               <>
+                {/* Date */}
+                <div className="text-center pb-1">
+                  <span style={{ color: '#475569' }} className="text-sm font-medium">
+                    {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
+                  </span>
+                </div>
+
                 {/* Hero Card - Syringe + Dose */}
                 <div 
                   style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
                   className="border rounded-2xl p-8"
                 >
-                  <div className="flex items-start justify-center gap-8">
-                    <div>
-                      {/* Date above syringe, aligned with THUB */}
-                      <div className="text-center mb-2">
-                        <span style={{ color: '#64748b' }} className="text-sm">
-                          {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
-                        </span>
-                      </div>
-                      <SyringeMain units={todayDose} />
-                    </div>
+                  <div className="flex items-center justify-center gap-8">
+                    <SyringeMain units={todayDose} />
                     
                     <div className="text-center">
-                      <p style={{ color: '#64748b' }} className="text-base mb-1">Дръпни до</p>
+                      <p style={{ color: '#64748b' }} className="text-sm mb-1">Дръпни до</p>
                       <p 
                         style={{ color: todayCompleted ? '#34d399' : '#22d3ee' }} 
                         className="text-6xl font-bold"
@@ -2480,7 +2309,7 @@ const THUBApp = () => {
                       todayEntry?.location === 'glute' ? '🍑' : 
                       todayEntry?.location === 'delt' ? '💪' : 
                       todayEntry?.location === 'quad' ? '🦵' : 
-                      todayEntry?.location === 'abdomen' ? 'â­•' : ''
+                      todayEntry?.location === 'abdomen' ? '⭕' : ''
                     }${todayEntry?.side === 'left' ? 'Л' : todayEntry?.side === 'right' ? 'Д' : ''}`}
                   </button>
                 ) : todayMissed ? (
@@ -2539,47 +2368,84 @@ const THUBApp = () => {
                   </div>
                 )}
 
-                {/* Следваща инжекция */}
-                {nextInjection && (
-                  <p style={{ color: '#64748b' }} className="text-center text-sm mt-4">
-                    Следваща: {nextInjection.dayName} {nextInjection.dateStr}, {nextInjection.dose}U
-                  </p>
-                )}
+                {/* Optimization в Today */}
+                {(() => {
+                  const isEOD = proto.frequency === 'EOD';
+                  const cycleDays = isEOD ? 14 : 7;
+                  const todayDate = new Date();
+                  const todayDayOfWeek = todayDate.getDay();
+                  const mondayOfWeek = new Date(todayDate);
+                  const daysFromMonday = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
+                  mondayOfWeek.setDate(todayDate.getDate() - daysFromMonday);
+                  const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+                  
+                  const cycleData = [];
+                  for (let i = 0; i < cycleDays; i++) {
+                    const dayDate = new Date(mondayOfWeek);
+                    dayDate.setDate(mondayOfWeek.getDate() + i);
+                    const isInjDay = isInjectionDay(dayDate);
+                    const dose = isInjDay ? (getDoseForDate(dayDate) || unitsRounded) : 0;
+                    const dayKey = `${dayDate.getFullYear()}-${dayDate.getMonth()}-${dayDate.getDate()}`;
+                    const entry = injections[dayKey];
+                    const isDone = entry && (entry.status === 'done' || !entry.status);
+                    const isMissed = entry && entry.status === 'missed';
+                    const isTodayDay = dayDate.toDateString() === todayDate.toDateString();
+                    const isFuture = dayDate > todayDate;
+                    const dayName = dayNamesShort[dayDate.getDay()];
+                    cycleData.push({ dayName, dose, isDone, isMissed, isToday: isTodayDay, isFuture, isInjDay });
+                  }
+                  
+                  const cycleInjections = cycleData.filter(d => d.isInjDay);
+                  const cycleTotalMg = cycleInjections.reduce((sum, d) => sum + (d.dose / 100 * compound.concentration), 0);
+                  const weeklyMg = isEOD ? cycleTotalMg / 2 : cycleTotalMg;
+                  const doseCounts = {};
+                  cycleInjections.forEach(d => { doseCounts[d.dose] = (doseCounts[d.dose] || 0) + 1; });
+                  const doseFormula = Object.entries(doseCounts)
+                    .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+                    .map(([dose, count]) => `${count}×${dose}U`)
+                    .join(' + ');
+                  
+                  return (
+                    <div style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }} className="border rounded-2xl p-4">
+                      <div className="overflow-x-auto pt-1 pb-1">
+                        <div className="flex gap-2 min-w-max justify-center px-1">
+                          {cycleData.map((day, i) => {
+                            const isPlanned = !day.isDone && !day.isMissed;
+                            const showPulse = day.isToday && isPlanned && day.isInjDay;
+                            return (
+                              <div key={i} style={{ 
+                                backgroundColor: '#0a1628',
+                                borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '3px solid transparent',
+                                minWidth: '40px',
+                                opacity: day.isFuture ? 0.6 : 1,
+                                animation: showPulse ? 'pulse 2s infinite' : 'none',
+                                boxShadow: showPulse ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
+                              }} className="px-2 py-2 rounded-lg text-center">
+                                <div style={{ color: '#94a3b8', fontSize: '10px' }}>{day.dayName}</div>
+                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
+                                {day.isDone && <div style={{ color: '#34d399', fontSize: '9px', fontWeight: 'bold' }}>✓</div>}
+                                {day.isMissed && <div style={{ color: '#fbbf24', fontSize: '9px', fontWeight: 'bold' }}>MISS</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <p style={{ color: '#94a3b8' }} className="text-xs text-center mt-2">
+                        {doseFormula} = {weeklyMg.toFixed(1)} {compound.unit}/сед
+                      </p>
+                    </div>
+                  );
+                })()}
               </>
             ) : (
-              /* Rest Day - спринцовка с 0, opacity 50% */
+              /* Rest Day */
               <div 
                 style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
-                className="border rounded-2xl p-8"
+                className="border rounded-2xl p-8 text-center"
               >
-                <div className="flex items-start justify-center gap-8" style={{ opacity: 0.5 }}>
-                  <div>
-                    {/* Date above syringe */}
-                    <div className="text-center mb-2">
-                      <span style={{ color: '#64748b' }} className="text-sm">
-                        {dayNames[today.getDay()]} {today.getDate().toString().padStart(2, '0')}/{(today.getMonth() + 1).toString().padStart(2, '0')}
-                      </span>
-                    </div>
-                    <SyringeMain units={0} />
-                  </div>
-                  
-                  <div className="text-center">
-                    <p style={{ color: '#64748b' }} className="text-base mb-1">Дръпни до</p>
-                    <p style={{ color: '#64748b' }} className="text-6xl font-bold">0U</p>
-                    <div style={{ color: '#64748b' }} className="text-sm mt-2 space-y-1">
-                      <p>0.0 {compound.unit}</p>
-                      <p>0.00 mL</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <p className="text-white text-xl font-bold text-center mt-6">Почивен ден</p>
-                
-                {nextInjection && (
-                  <p style={{ color: '#22d3ee' }} className="text-center text-sm mt-3">
-                    Следваща: {nextInjection.dayName} {nextInjection.dateStr}, {nextInjection.dose}U
-                  </p>
-                )}
+                <p className="text-5xl mb-4">😌</p>
+                <p className="text-white text-2xl font-bold">Почивен ден</p>
+                <p style={{ color: '#64748b' }} className="mt-2">Следваща инжекция скоро</p>
               </div>
             )}
           </div>
@@ -2649,7 +2515,7 @@ const THUBApp = () => {
                   const locationEmoji = doneLocation === 'glute' ? '🍑' : 
                                         doneLocation === 'delt' ? '💪' : 
                                         doneLocation === 'quad' ? '🦵' : 
-                                        doneLocation === 'abdomen' ? 'â­•' : '';
+                                        doneLocation === 'abdomen' ? '⭕' : '';
                   const sideLabel = doneSide === 'left' ? 'Л' : doneSide === 'right' ? 'Д' : '';
 
                   cells.push(
@@ -2915,21 +2781,19 @@ const THUBApp = () => {
                           <div
                             key={i}
                             style={{ 
-                              backgroundColor: 'transparent',
-                              border: '1px solid #1e3a5f',
-                              borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '1px solid #1e3a5f',
-                              width: '46px',
-                              opacity: day.isFuture ? 0.5 : 1,
+                              backgroundColor: '#0a1628',
+                              borderLeft: day.isDone ? '3px solid #059669' : day.isMissed ? '3px solid #d97706' : '3px solid transparent',
+                              minWidth: '40px',
+                              opacity: day.isFuture ? 0.6 : 1,
                               animation: showPulse ? 'pulse 2s infinite' : 'none',
-                              boxShadow: showPulse ? '0 0 0 2px rgba(34, 211, 238, 0.4)' : 'none',
+                              boxShadow: showPulse ? '0 0 0 3px rgba(34, 211, 238, 0.5)' : 'none'
                             }}
-                            className="py-2 rounded-lg text-center flex-shrink-0"
+                            className="px-2 py-2 rounded-lg text-center"
                           >
                             <div style={{ color: '#94a3b8', fontSize: '10px' }}>{day.dayName}</div>
-                            <div style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '12px' }}>
-                              {day.dose}U
-                            </div>
-                            {day.isDone && <div style={{ color: '#34d399', fontSize: '12px', lineHeight: 1, marginTop: '-1px' }}>✓</div>}
+                            <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{day.dose}U</div>
+                            {day.isDone && <div style={{ color: '#34d399', fontSize: '9px', fontWeight: 'bold' }}>✓</div>}
+                            {day.isMissed && <div style={{ color: '#fbbf24', fontSize: '9px', fontWeight: 'bold' }}>MISS</div>}
                           </div>
                         );
                       })}
@@ -3290,7 +3154,7 @@ const THUBApp = () => {
             </button>
 
             <button
-              onClick={async () => { await authSignOut(); setUserId(null); setCurrentStep('onboarding'); }}
+              onClick={() => setCurrentStep('onboarding')}
               style={{ backgroundColor: '#0f172a', borderColor: '#1e3a5f' }}
               className="w-full border rounded-2xl p-4 text-left flex items-center justify-between"
             >
@@ -3548,10 +3412,4 @@ const THUBApp = () => {
   );
 };
 
-const THUBAppWithErrorBoundary = () => (
-  <ErrorBoundary>
-    <THUBApp />
-  </ErrorBoundary>
-);
-
-export default THUBAppWithErrorBoundary;
+export default THUBApp;
