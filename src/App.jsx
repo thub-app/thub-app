@@ -248,7 +248,13 @@ const THUBApp = () => {
       setPulseOpen(true);
     }
   }, []);
-  // Save injections when changed
+  // Sync protocolData with profile.protocol
+  useEffect(() => {
+    if (profile.protocol) {
+      setProtocolData(profile.protocol);
+    }
+  }, [profile.protocol]); 
+    // Save injections when changed
   useEffect(() => {
     saveToStorage('thub-injections', injections);
     // Supabase sync
