@@ -2299,7 +2299,7 @@ const THUBApp = () => {
           />
         </div>
         <div style={{ color: '#64748b' }} className="text-center text-xs mt-2">
-          {todayProto.graduation}U = {(todayProto.graduation * todayCompound.concentration / 100).toFixed(1)} {todayCompound.unit}
+          1 деление = {(todayProto.graduation * todayCompound.concentration / 100).toFixed(1)} {todayCompound.unit}
         </div>
       </div>
     );
