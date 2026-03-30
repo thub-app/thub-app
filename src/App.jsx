@@ -1105,7 +1105,7 @@ const THUBApp = () => {
     const actualDose = actualMl * compound.concentration;
 
     // Max units for display (50 for 1U scale, 100 for 2U scale)
-    const maxUnits = protocolData.graduation === 1 ? 50 : 100;
+    const maxUnits = 100;
     const displayUnits = Math.min(unitsRounded, maxUnits);
 
     // Get PK parameters based on all protocol factors
