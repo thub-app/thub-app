@@ -19,6 +19,7 @@ import {
     loadFromStorage,
     saveToStorage,
     migrateProfile,
+    
     authSignUp,
     authSignIn,
     authSignOut,
@@ -2235,11 +2236,11 @@ const THUBApp = () => {
 
   // Syringe component for main view - with logo inside
   const SyringeMain = ({ units }) => {
-    const maxUnits = todayProto.graduation === 1 ? 50 : 100;
+    const maxUnits = 100;
     const displayUnits = Math.min(units, maxUnits);
     const ticks = todayProto.graduation === 2
       ? Array.from({ length: 51 }, (_, i) => i * 2)
-      : Array.from({ length: 51 }, (_, i) => i);
+      : Array.from({ length: 101 }, (_, i) => i);
 
     return (
       <div className="relative">
