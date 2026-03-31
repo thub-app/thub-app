@@ -2901,7 +2901,7 @@ const THUBApp = () => {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: '#64748b' }}>Скала</span>
-                  <span className="text-white">{proto.graduation}U (0-{proto.graduation === 1 ? 50 : 100}U)</span>
+                  <span className="text-white">{proto.graduation}U (0-100U)</span>
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: '#64748b' }}>Начало на протокола</span>
