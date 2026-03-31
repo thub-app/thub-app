@@ -1321,7 +1321,7 @@ const THUBApp = () => {
                 className="flex-1 py-4 border rounded-xl font-semibold transition-colors"
               >
                 <div className="text-lg">1U</div>
-                <div style={{ color: protocolData.graduation === 1 ? '#cffafe' : '#64748b' }} className="text-xs">прецизна (0-50U)</div>
+                <div style={{ color: protocolData.graduation === 1 ? '#cffafe' : '#64748b' }} className="text-xs">прецизна (0-100U)</div>
               </button>
               <button
                 onClick={() => setProtocolData(prev => ({ ...prev, graduation: 2 }))}
