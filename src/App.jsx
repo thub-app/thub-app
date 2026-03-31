@@ -2057,7 +2057,7 @@ const THUBApp = () => {
   const todayIsInjectionDay = isInjectionDayForProto(today, getProtocolForDate(today));
 
   // Протоколът който РЕАЛНО важи за днес (може да е различен от proto ако новият важи от бъдеща дата)
-  const todayProto = getProtocolForDate(today);
+ const todayProto = proto;
   const todayCompound = compounds.find(c => c.id === todayProto.compound) || compounds[0];
   const todayFreq = frequenciesData.find(f => f.id === todayProto.frequency) || frequenciesData[1];
 
