@@ -1739,7 +1739,7 @@ const THUBApp = () => {
                     <input
                       type="date"
                       value={effectiveFromCustomDate}
-                      min={new Date().toISOString().split('T')[0]}
+                    
                       onChange={(e) => setEffectiveFromCustomDate(e.target.value)}
                       style={{ backgroundColor: '#0a1628', borderColor: '#1e3a5f', color: 'white' }}
                       className="w-full px-4 py-3 border rounded-xl focus:outline-none mt-2"
