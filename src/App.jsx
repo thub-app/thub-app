@@ -753,14 +753,7 @@ const THUBApp = () => {
         createdAt: now,
         note: null
       }];
-  } else {
-    newVersions = [{
-      ...protocolData,
-      effectiveFrom: protocolData.startDate,
-      createdAt: now,
-      note: null
-    }];
-  }  
+  }
       
     let newHistory = profile.protocolHistory || [];
     if (reason && profile.protocol) {
